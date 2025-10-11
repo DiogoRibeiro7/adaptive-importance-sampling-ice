@@ -197,11 +197,11 @@ class InverseNakagamiDistribution:
 class vMFNMDistribution:
     """Complete von Mises-Fisher-Nakagami mixture distribution"""
 
-    def __init__(self, params: vMFNMParameters):
+    def __init__(self, params: vMFNMParameters) -> None:
         self.params = params
         self._validate_parameters()
 
-    def _validate_parameters(self):
+    def _validate_parameters(self) -> None:
         """Validate parameter consistency"""
         K, d = self.params.K, self.params.d
 
@@ -313,7 +313,7 @@ class vMFNMDistribution:
 class PenalizedEMOptimizer:
     """Penalized EM algorithm for automatic component selection"""
 
-    def __init__(self, max_em_iterations: int = 100, em_tolerance: float = 1e-6):
+    def __init__(self, max_em_iterations: int = 100, em_tolerance: float = 1e-6) -> None:
         self.max_em_iterations = max_em_iterations
         self.em_tolerance = em_tolerance
 
@@ -641,7 +641,7 @@ class SafeICE:
         N: int = 1000,
         sigma0: float = 1.0,
         em_max_iter: int = 100,
-    ):
+    ) -> None:
         """
         Initialize Safe-ICE algorithm
 
@@ -908,7 +908,7 @@ class SafeICE:
     ) -> float:
         """Determine next smoothing parameter by solving optimization problem (10)"""
 
-        def cv_objective(sigma):
+        def cv_objective(sigma: float) -> float:
             """Objective function: (δ_W_t(σ) - δ_target)²"""
             if sigma >= sigma_prev or sigma <= 0:
                 return 1e10
@@ -1186,7 +1186,7 @@ class HeatTransferProblem:
         correlation_length: float = 0.2,
         n_terms: int = 10,
         heat_source: float = 2000.0,
-    ):
+    ) -> None:
         """
         Initialize heat transfer problem
 
@@ -1210,7 +1210,7 @@ class HeatTransferProblem:
         # Precompute KL expansion basis
         self._setup_kl_expansion()
 
-    def _setup_discretization(self):
+    def _setup_discretization(self) -> None:
         """Setup finite element discretization"""
         x = np.linspace(self.domain[0], self.domain[1], self.grid_size)
         y = np.linspace(self.domain[2], self.domain[3], self.grid_size)
@@ -1220,7 +1220,7 @@ class HeatTransferProblem:
         self.grid_points = np.column_stack([self.X.ravel(), self.Y.ravel()])
         self.n_points = len(self.grid_points)
 
-    def _setup_kl_expansion(self):
+    def _setup_kl_expansion(self) -> None:
         """Setup Karhunen-Loève expansion for lognormal random field"""
         # Exponential covariance function: k(x,x') = exp(-||x-x'||/l)
         distances = np.sqrt(
@@ -1420,7 +1420,7 @@ class PerformanceEvaluator:
 
 
 # Complete example usage
-def run_comprehensive_examples():
+def run_comprehensive_examples() -> None:
     """Run all benchmark problems with complete implementation"""
 
     print("SAFE-ICE COMPREHENSIVE IMPLEMENTATION")
@@ -1530,7 +1530,7 @@ def run_comprehensive_examples():
 
 
 # Performance comparison with standard methods
-def performance_comparison_study():
+def performance_comparison_study() -> Dict[str, Any]:
     """Detailed performance comparison study"""
     print("\nPERFORMARE COMPARISON STUDY")
     print("=" * 50)
