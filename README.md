@@ -1,6 +1,6 @@
 # Adaptive Importance Sampling ICE
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![arXiv](https://img.shields.io/badge/arXiv-2509.07160-b31b1b.svg)](https://arxiv.org/abs/2509.07160)
 
@@ -239,7 +239,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Related Work
 
-- [Original ICE Paper](https://www.sciencedirect.com/science/article/pii/S0951832019301656)
+- [Original ICE Paper](https://https://arxiv.org/abs/2509.07160)
 - [Cross-Entropy Method](https://link.springer.com/article/10.1007/s10479-005-5724-z)
 - [Subset Simulation](https://doi.org/10.1016/S0266-8920(01)00019-4)
 
