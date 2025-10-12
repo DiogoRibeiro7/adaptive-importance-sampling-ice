@@ -1,0 +1,235 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safe-ice"
+version = "0.1.0"
+description = "Safe Cross-Entropy-Based Importance Sampling for Rare Event Simulations"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "Diogo Ribeiro", email = "dfr@esmad.ipp.pt"}
+]
+maintainers = [
+    {name = "Diogo Ribeiro", email = "dfr@esmad.ipp.pt"}
+]
+keywords = [
+    "importance-sampling",
+    "rare-events",
+    "reliability-analysis",
+    "monte-carlo",
+    "cross-entropy",
+    "structural-reliability"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+
+dependencies = [
+    "numpy>=1.21.0",
+    "scipy>=1.7.0",
+    "matplotlib>=3.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.0.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "pre-commit>=3.0.0",
+    "bandit[toml]>=1.7.0",
+    "pip-audit>=2.6.0",
+]
+docs = [
+    "sphinx>=6.0.0",
+    "sphinx-rtd-theme>=1.3.0",
+    "sphinx-autodoc-typehints>=1.24.0",
+    "myst-parser>=2.0.0",
+]
+benchmark = [
+    "pandas>=1.5.0",
+    "seaborn>=0.12.0",
+    "jupyter>=1.0.0",
+    "ipykernel>=6.25.0",
+]
+all = [
+    "safe-ice[dev,docs,benchmark]",
+]
+
+[project.urls]
+Homepage = "https://github.com/diogoribeiro7/adaptive-importance-sampling-ice"
+Documentation = "https://github.com/diogoribeiro7/adaptive-importance-sampling-ice#readme"
+Repository = "https://github.com/diogoribeiro7/adaptive-importance-sampling-ice"
+Issues = "https://github.com/diogoribeiro7/adaptive-importance-sampling-ice/issues"
+Changelog = "https://github.com/diogoribeiro7/adaptive-importance-sampling-ice/blob/main/CHANGELOG.md"
+
+[project.scripts]
+safe-ice = "safe_ice.cli:main"
+
+[tool.setuptools]
+packages = ["safe_ice"]
+
+[tool.setuptools.package-data]
+safe_ice = ["py.typed"]
+
+# ==================== BLACK ====================
+[tool.black]
+line-length = 88
+target-version = ['py38', 'py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+# ==================== ISORT ====================
+[tool.isort]
+profile = "black"
+line_length = 88
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+skip_gitignore = true
+known_first_party = ["safe_ice"]
+
+# ==================== RUFF ====================
+[tool.ruff]
+target-version = "py38"
+line-length = 88
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "ARG", # flake8-unused-arguments
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+    "B905",  # zip strict parameter (not in 3.8)
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/**/*.py" = ["ARG", "S101"]
+
+# ==================== MYPY ====================
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+follow_imports = "normal"
+strict_equality = true
+strict_optional = true
+show_error_codes = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "scipy.*",
+    "matplotlib.*",
+]
+ignore_missing_imports = true
+
+# ==================== PYTEST ====================
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--showlocals",
+    "--tb=short",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "benchmark: marks tests as benchmark tests",
+]
+filterwarnings = [
+    "error",
+    "ignore::UserWarning",
+    "ignore::DeprecationWarning",
+]
+
+# ==================== COVERAGE ====================
+[tool.coverage.run]
+branch = true
+source = ["safe_ice"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+]
+
+[tool.coverage.report]
+precision = 2
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if __name__ == .__main__.:",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if False:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+show_missing = true
+skip_covered = false
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+# ==================== BANDIT ====================
+[tool.bandit]
+exclude_dirs = ["tests", "scripts"]
+skips = ["B101", "B601"]
+
+# ==================== PIP-AUDIT ====================
+[tool.pip-audit]
+ignore-vulns = []
