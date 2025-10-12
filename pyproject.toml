@@ -1,101 +1,96 @@
 [build-system]
-requires = ["setuptools>=65.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
 
-[project]
+[tool.poetry]
 name = "safe-ice"
 version = "0.1.0"
 description = "Safe Cross-Entropy-Based Importance Sampling for Rare Event Simulations"
 readme = "README.md"
-requires-python = ">=3.9"
-license = {text = "MIT"}
-authors = [
-    {name = "Diogo Ribeiro", email = "dfr@esmad.ipp.pt"}
-]
-maintainers = [
-    {name = "Diogo Ribeiro", email = "dfr@esmad.ipp.pt"}
-]
+license = "MIT"
+authors = ["Diogo Ribeiro <dfr@esmad.ipp.pt>"]
+maintainers = ["Diogo Ribeiro <dfr@esmad.ipp.pt>"]
 keywords = [
-    "importance-sampling",
-    "rare-events",
-    "reliability-analysis",
-    "monte-carlo",
-    "cross-entropy",
-    "structural-reliability"
+  "importance-sampling",
+  "rare-events",
+  "reliability-analysis",
+  "monte-carlo",
+  "cross-entropy",
+  "structural-reliability"
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: Scientific/Engineering",
-    "Topic :: Scientific/Engineering :: Mathematics",
-    "Topic :: Scientific/Engineering :: Physics",
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Mathematics",
+  "Topic :: Scientific/Engineering :: Physics",
 ]
 
-dependencies = [
-    "numpy>=1.21.0",
-    "scipy>=1.7.0",
-    "matplotlib>=3.4.0",
-]
+# Package layout
+packages = [{ include = "safe_ice" }]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "pytest-xdist>=3.0.0",
-    "mypy>=1.0.0",
-    "ruff>=0.1.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "pre-commit>=3.0.0",
-    "bandit[toml]>=1.7.0",
-    "pip-audit>=2.6.0",
-]
-docs = [
-    "sphinx>=6.0.0",
-    "sphinx-rtd-theme>=1.3.0",
-    "sphinx-autodoc-typehints>=1.24.0",
-    "myst-parser>=2.0.0",
-]
-benchmark = [
-    "pandas>=1.5.0",
-    "seaborn>=0.12.0",
-    "jupyter>=1.0.0",
-    "ipykernel>=6.25.0",
-]
-all = [
-    "safe-ice[dev,docs,benchmark]",
-]
+# Include type marker and any non-code assets if needed
+include = ["safe_ice/py.typed"]
 
-[project.urls]
+[tool.poetry.urls]
 Homepage = "https://github.com/diogoribeiro7/adaptive-importance-sampling-ice"
 Documentation = "https://github.com/diogoribeiro7/adaptive-importance-sampling-ice#readme"
 Repository = "https://github.com/diogoribeiro7/adaptive-importance-sampling-ice"
 Issues = "https://github.com/diogoribeiro7/adaptive-importance-sampling-ice/issues"
 Changelog = "https://github.com/diogoribeiro7/adaptive-importance-sampling-ice/blob/main/CHANGELOG.md"
 
-[project.scripts]
+[tool.poetry.dependencies]
+python = ">=3.9,<3.13"
+numpy = ">=1.21.0"
+scipy = ">=1.7.0"
+matplotlib = ">=3.4.0"
+
+[tool.poetry.scripts]
 safe-ice = "safe_ice.cli:main"
 
-[tool.setuptools]
-packages = ["safe_ice"]
+# ---------------- Dependency Groups (Poetry ≥1.2) ----------------
 
-[tool.setuptools.package-data]
-safe_ice = ["py.typed"]
+[tool.poetry.group.dev.dependencies]
+pytest = ">=7.0.0"
+pytest-cov = ">=4.0.0"
+pytest-xdist = ">=3.0.0"
+mypy = ">=1.0.0"
+ruff = ">=0.1.0"
+black = ">=23.0.0"
+isort = ">=5.12.0"
+pre-commit = ">=3.0.0"
+bandit = {version = ">=1.7.0", extras = ["toml"]}
+pip-audit = ">=2.6.0"
+
+[tool.poetry.group.docs.dependencies]
+sphinx = ">=6.0.0"
+sphinx-rtd-theme = ">=1.3.0"
+sphinx-autodoc-typehints = ">=1.24.0"
+myst-parser = ">=2.0.0"
+
+[tool.poetry.group.benchmark.dependencies]
+pandas = ">=1.5.0"
+seaborn = ">=0.12.0"
+jupyter = ">=1.0.0"
+ipykernel = ">=6.25.0"
+
+# Notes:
+# - Install with groups: `poetry install --with dev,docs,benchmark`
+# - Omit groups:        `poetry install --without docs,benchmark`
 
 # ==================== BLACK ====================
 [tool.black]
 line-length = 88
-target-version = ['py38', 'py39', 'py310', 'py311']
+target-version = ['py39', 'py310', 'py311', 'py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
-  # directories
   \.eggs
   | \.git
   | \.hg
@@ -121,23 +116,15 @@ known_first_party = ["safe_ice"]
 
 # ==================== RUFF ====================
 [tool.ruff]
-target-version = "py38"
+target-version = "py39"
 line-length = 88
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-    "UP",  # pyupgrade
-    "ARG", # flake8-unused-arguments
-    "SIM", # flake8-simplify
+  "E","W","F","I","B","C4","UP","ARG","SIM"
 ]
 ignore = [
-    "E501",  # line too long (handled by black)
-    "B008",  # do not perform function calls in argument defaults
-    "B905",  # zip strict parameter (not in 3.8)
+  "E501",  # long lines handled by black
+  "B008",  # function call in default args
+  "B905",  # zip strict (pre-3.10)
 ]
 
 [tool.ruff.per-file-ignores]
@@ -146,7 +133,7 @@ ignore = [
 
 # ==================== MYPY ====================
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -164,10 +151,7 @@ show_error_codes = true
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = [
-    "scipy.*",
-    "matplotlib.*",
-]
+module = ["scipy.*", "matplotlib.*"]
 ignore_missing_imports = true
 
 # ==================== PYTEST ====================
@@ -178,46 +162,42 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
-    "-ra",
-    "--strict-markers",
-    "--strict-config",
-    "--showlocals",
-    "--tb=short",
+  "-ra",
+  "--strict-markers",
+  "--strict-config",
+  "--showlocals",
+  "--tb=short",
 ]
 markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-    "benchmark: marks tests as benchmark tests",
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "integration: marks tests as integration tests",
+  "benchmark: marks tests as benchmark tests",
 ]
 filterwarnings = [
-    "error",
-    "ignore::UserWarning",
-    "ignore::DeprecationWarning",
+  "error",
+  "ignore::UserWarning",
+  "ignore::DeprecationWarning",
 ]
 
 # ==================== COVERAGE ====================
 [tool.coverage.run]
 branch = true
 source = ["safe_ice"]
-omit = [
-    "*/tests/*",
-    "*/__pycache__/*",
-    "*/site-packages/*",
-]
+omit = ["*/tests/*","*/__pycache__/*","*/site-packages/*"]
 
 [tool.coverage.report]
 precision = 2
 exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "if self.debug:",
-    "if __name__ == .__main__.:",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if 0:",
-    "if False:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod",
+  "pragma: no cover",
+  "def __repr__",
+  "if self.debug:",
+  "if __name__ == .__main__.:",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if 0:",
+  "if False:",
+  "class .*\\bProtocol\\):",
+  "@(abc\\.)?abstractmethod",
 ]
 show_missing = true
 skip_covered = false
