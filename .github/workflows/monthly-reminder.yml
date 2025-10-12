@@ -1,3 +1,11 @@
+name: Monthly maintenance reminder
+
+on:
+  schedule:
+    # Second Monday of each month at 09:00 UTC
+    - cron: "0 9 8-14 * 1"
+  workflow_dispatch:
+
 jobs:
   monthly-reminder:
     runs-on: ubuntu-latest
