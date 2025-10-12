@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac  # v4 pinned
+        uses: actions/checkout@v6
 
       - name: Ensure jq is available
         run: |
@@ -156,7 +156,7 @@ jobs:
       - name: Create issue if none exists
         if: steps.find_issue.outputs.issue_number == ''
         id: create_issue
-        uses: peter-evans/create-issue-from-file@d9b3b89f0b1f2b1bc5f879f2b9b4d1b6e1a3b2a9 # v5 pinned
+        uses: peter-evans/create-issue-from-file@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           title: ${{ env.REMINDER_TITLE }}
