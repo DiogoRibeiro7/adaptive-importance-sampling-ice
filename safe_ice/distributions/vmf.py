@@ -1,4 +1,7 @@
+"""von Mises-Fisher distribution sampler."""
+
 import numpy as np
+
 
 class VonMisesFisherSampler:
     """Exact von Mises-Fisher distribution sampler using Wood's algorithm"""

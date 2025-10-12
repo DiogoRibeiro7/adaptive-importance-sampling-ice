@@ -1,6 +1,11 @@
+"""von Mises-Fisher-Nakagami mixture distribution."""
+
 import numpy as np
 from scipy.special import iv, gamma
-from .core.parameters import vMFNMParameters
+
+from ..core.parameters import vMFNMParameters
+from .vmf import VonMisesFisherSampler
+from .nakagami import NakagamiDistribution
 
 
 class vMFNMDistribution:
