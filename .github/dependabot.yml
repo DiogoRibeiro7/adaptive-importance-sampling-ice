@@ -1,97 +1,24 @@
 version: 2
-
-# If you use private package indexes, define them here and reference in updates.registries.
-# registries:
-#   gh-pypi:
-#     type: python-index
-#     url: https://pip.pkg.github.com/<ORG_OR_USER>/
-#     username: ${{secrets.DEPENDABOT_USERNAME}}
-#     password: ${{secrets.DEPENDABOT_TOKEN}}
-
 updates:
-  # ──────────────────────────────
-  # Python (Poetry)
-  # ──────────────────────────────
-  - package-ecosystem: "poetry"
-    directory: "/"                  # where pyproject.toml lives
+  # Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
     schedule:
       interval: "weekly"
-      day: "monday"
-      time: "07:30"
-      timezone: "Europe/Lisbon"
-    # target the working branch you use for integrating deps (use "main" if you prefer)
-    target-branch: "develop"
     open-pull-requests-limit: 10
-    # Only bump the version when necessary; keep lockfile fresh
-    versioning-strategy: "increase-if-necessary"
-    # For mono-repos with extra pyprojects, duplicate this block per directory.
+    reviewers:
+      - "diogoribeiro7"
+    labels:
+      - "dependencies"
+      - "python"
 
-    # Optional: link a private index defined above
-    # registries:
-    #   - "gh-pypi"
-
-    labels: ["dependencies", "python"]
-    reviewers: ["diogoribeiro7"]
-    assignees: ["diogoribeiro7"]
-
-    # Group updates to reduce PR noise.
-    groups:
-      core-minor-patch:
-        update-types: ["minor", "patch"]
-        dependency-type: "production"
-        patterns: ["*"]             # all prod deps
-      dev-tools:
-        dependency-type: "development"
-        patterns:
-          - "pytest*"
-          - "mypy"
-          - "ruff*"
-          - "black"
-          - "isort"
-          - "bandit"
-          - "pre-commit"
-      major-upgrades:
-        update-types: ["major"]
-        patterns: ["*"]             # keep majors in a single PR, easier to review
-
-    # Keep noise down (examples—tune to taste)
-    # ignore:
-    #   - dependency-name: "numpy"
-    #     update-types: ["version-update:semver-major"]
-    #   - dependency-name: "pandas"
-    #     versions: [">=3.0.0"]
-
-    rebase-strategy: "auto"
-    commit-message:
-      prefix: "deps"
-      include: "scope"
-
-  # ──────────────────────────────
   # GitHub Actions
-  # ──────────────────────────────
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
-      day: "monday"
-      time: "08:00"
-      timezone: "Europe/Lisbon"
-    target-branch: "develop"
-    labels: ["dependencies", "github-actions"]
-    reviewers: ["diogoribeiro7"]
-    assignees: ["diogoribeiro7"]
-
-    # Group minor/patch updates into one PR; keep majors separate
-    groups:
-      gha-minor-patch:
-        update-types: ["minor", "patch"]
-        patterns: ["*"]
-      gha-major:
-        update-types: ["major"]
-        patterns: ["*"]
-
-    # Example: hold back preview/beta actions if you want
-    # ignore:
-    #   - dependency-name: "actions/*"
-    #     versions: ["*-beta", "*-rc"]
-
+    reviewers:
+      - "diogoribeiro7"
+    labels:
+      - "dependencies"
+      - "github-actions"
