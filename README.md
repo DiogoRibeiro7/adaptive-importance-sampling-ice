@@ -239,7 +239,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Related Work
 
-- [Original ICE Paper](https://https://arxiv.org/abs/2509.07160)
+- [Original ICE Paper](https://arxiv.org/abs/2509.07160)
 - [Cross-Entropy Method](https://link.springer.com/article/10.1007/s10479-005-5724-z)
 - [Subset Simulation](https://doi.org/10.1016/S0266-8920(01)00019-4)
 
