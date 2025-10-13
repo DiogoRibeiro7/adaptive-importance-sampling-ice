@@ -19,90 +19,358 @@ permissions:
 jobs:
   analyze-dependencies:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install Poetry (if using Poetry)
+      - name: Extract dependencies (pyproject/poetry.lock/requirements)
+        id: extract
+        shell: bash
         run: |
-          if [ -f "pyproject.toml" ] && grep -q "\[tool.poetry\]" pyproject.toml; then
-            curl -sSL https://install.python-poetry.org | python3 -
-            echo "$HOME/.local/bin" >> $GITHUB_PATH
+          python - << 'PY'
+          """
+          Extract top-level Python dependencies from:
+            - pyproject.toml (PEP 621 [project] and/or [tool.poetry.dependencies])
+            - poetry.lock (TOML format, Poetry >=1.2)
+            - requirements.txt (bare, ==, <=, >= lines)
+          Writes a JSON file deps.json with:
+            { "direct": ["pkgA", "pkgB", ...] }
+          """
+          import json, re, sys, os
+          from pathlib import Path
+          import tomllib  # Python 3.11+
+
+          root = Path(".")
+          direct: set[str] = set()
+
+          def norm(name: str) -> str:
+            # Normalize a dependency name (PEP 503-ish simple)
+            return re.sub(r"[_\.\s]+", "-", name.strip()).lower()
+
+          # 1) pyproject.toml
+          pp = root / "pyproject.toml"
+          if pp.exists():
+            data = tomllib.loads(pp.read_text(encoding="utf-8"))
+            # PEP 621 style
+            project = data.get("project") or {}
+            for dep in project.get("dependencies", []) or []:
+              name = dep.split(";")[0].strip()
+              name = re.split(r"[<>=!~\[\( ]", name, 1)[0]
+              if name and name.lower() != "python":
+                direct.add(norm(name))
+            # Poetry-style
+            poetry = (data.get("tool") or {}).get("poetry") or {}
+            deps = poetry.get("dependencies") or {}
+            for name, _spec in deps.items():
+              if name.lower() != "python":
+                direct.add(norm(name))
+
+          # 2) poetry.lock (TOML since Poetry 1.2)
+          lock = root / "poetry.lock"
+          if lock.exists():
+            try:
+              ldata = tomllib.loads(lock.read_text(encoding="utf-8"))
+              # Keep only top-level (category="main") packages
+              for pkg in ldata.get("package", []) or []:
+                if pkg.get("category") == "main":
+                  n = pkg.get("name")
+                  if n:
+                    direct.add(norm(n))
+            except Exception:
+              # Older Poetry lock or different format: ignore gracefully
+              pass
+
+          # 3) requirements.txt
+          req = root / "requirements.txt"
+          if req.exists():
+            for line in req.read_text(encoding="utf-8").splitlines():
+              line = line.strip()
+              if not line or line.startswith("#") or line.startswith("-"):
+                continue
+              # Strip version pins and comments
+              line = line.split("#", 1)[0].strip()
+              name = re.split(r"(==|>=|<=|>|<|~=|!=)", line, 1)[0].strip()
+              if name:
+                direct.add(norm(name))
+
+          # Write JSON
+          out = {"direct": sorted(direct)}
+          Path("deps.json").write_text(json.dumps(out, indent=2), encoding="utf-8")
+          print(f"Extracted {len(out['direct'])} direct dependencies")
+          PY
+
+      - name: Install pip-audit
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pip-audit
+
+      - name: Run vulnerability audit (pip-audit)
+        # Prefer lock > requirements; else audit resolved env (empty) -> safe no-op
+        run: |
+          if [ -f poetry.lock ]; then
+            pip-audit -f json -p poetry.lock > audit.json || true
+          elif [ -f requirements.txt ]; then
+            pip-audit -f json -r requirements.txt > audit.json || true
+          else
+            echo "[]" > audit.json
           fi
+          echo "Audit written to audit.json"
 
-      - name: Extract dependencies
-        id: extract-deps
-        run: |
-          # Create a temporary directory for our script
-          mkdir -p .github/scripts
-          
-          # This will be replaced by our TypeScript action
-          echo "Dependencies extracted"
-
-      - name: Run Dependency Health Analyzer
-        id: analyze
+      - name: Dependency Health Analyzer (PyPI/GitHub + merge audit)
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            /**
+             * Dependency Health Analyzer
+             * - Reads deps.json and audit.json written by prior steps.
+             * - For each dep (first 40 to be safe), fetches PyPI metadata.
+             * - Tries to infer GitHub repo, fetches stars/activity/issues.
+             * - Scores health and merges pip-audit findings.
+             * - Posts Markdown report to PR comment or rolling Issue.
+             */
+
+            // -------- Types (JSDoc) ----------
+            /**
+             * @typedef {Object} Health
+             * @property {string} name
+             * @property {number} score
+             * @property {Record<string, any>} metrics
+             * @property {string[]} warnings
+             * @property {string[]} suggestions
+             * @property {Array<{id?: string, advisory?: string, severity?: string, fix_version?: string, cve?: string}>=} vulns
+             */
+
             const fs = require('fs');
-            const path = require('path');
-            
-            // Read dependencies from pyproject.toml or requirements.txt
-            let dependencies = [];
-            
-            if (fs.existsSync('pyproject.toml')) {
-              const toml = fs.readFileSync('pyproject.toml', 'utf8');
-              // Basic TOML parsing for dependencies
-              const depMatch = toml.match(/\[tool\.poetry\.dependencies\]([\s\S]*?)(\[|$)/);
-              if (depMatch) {
-                const depSection = depMatch[1];
-                const lines = depSection.split('\n');
-                for (const line of lines) {
-                  const match = line.match(/^([a-zA-Z0-9_-]+)\s*=/);
-                  if (match && match[1] !== 'python') {
-                    dependencies.push(match[1]);
+
+            // ---------- Helpers ----------
+            const safeRead = (p) => {
+              try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
+              catch { return null; }
+            };
+
+            const depsJson = safeRead('deps.json') || { direct: [] };
+            const auditJson = safeRead('audit.json') || [];
+
+            /** Build index: package -> vulnerability array */
+            const auditIndex = new Map();
+            for (const item of auditJson) {
+              const name = (item?.name || '').toLowerCase();
+              if (!name) continue;
+              if (!auditIndex.has(name)) auditIndex.set(name, []);
+              auditIndex.get(name).push({
+                id: item.advisory?.id,
+                advisory: item.advisory?.summary,
+                severity: item.advisory?.severity,
+                fix_version: item.fix_versions?.[0],
+                cve: item.advisory?.cve
+              });
+            }
+
+            const limit = 40; // raise cautiously if you want
+            const dependencies = (depsJson.direct || []).slice(0, limit);
+            console.log(`Analyzing ${dependencies.length} dependencies`);
+
+            /** @param {string} pkg */
+            async function analyzeDependency(pkg) {
+              /** @type {Health} */
+              const health = { name: pkg, score: 0, metrics: {}, warnings: [], suggestions: [], vulns: [] };
+
+              // Merge audit results, if any
+              const pkgVulns = auditIndex.get(pkg) || [];
+              if (pkgVulns.length) {
+                health.vulns = pkgVulns;
+                health.metrics.vulnerabilityCount = pkgVulns.length;
+              }
+
+              // PyPI metadata
+              try {
+                const pypi = await fetch(`https://pypi.org/pypi/${encodeURIComponent(pkg)}/json`);
+                if (!pypi.ok) {
+                  health.warnings.push('Package not found on PyPI');
+                  return health;
+                }
+                const pypiData = await pypi.json();
+                const info = pypiData.info || {};
+                const releases = Object.keys(pypiData.releases || {});
+                const latest = info.version;
+                const uploaded = pypiData.releases?.[latest]?.[0]?.upload_time;
+                const lastDate = uploaded ? new Date(uploaded) : null;
+                const daysSinceRel = lastDate ? Math.floor((Date.now() - lastDate.getTime())/86400000) : null;
+
+                health.metrics.latestVersion = latest;
+                health.metrics.totalReleases = releases.length;
+                if (daysSinceRel !== null) health.metrics.daysSinceLastRelease = daysSinceRel;
+
+                // Recency score (30)
+                let recency = 30;
+                if (daysSinceRel === null) {
+                  recency = 10;
+                  health.warnings.push('⚠️ No release timestamp found');
+                } else if (daysSinceRel > 730) {
+                  recency = 5; health.warnings.push('⚠️ No release in over 2 years');
+                } else if (daysSinceRel > 365) {
+                  recency = 15; health.warnings.push('⚠️ No release in over 1 year');
+                } else if (daysSinceRel > 180) {
+                  recency = 25;
+                }
+                health.score += recency;
+
+                if (!info.license) health.warnings.push('⚠️ No license specified');
+                if (releases.length < 5) health.warnings.push('⚠️ Few releases (early stage?)');
+
+                // Try to infer GitHub repo from URLs
+                const candidates = [info.home_page, info.project_url, info.bugtrack_url, ...(info.project_urls ? Object.values(info.project_urls) : [])]
+                  .filter(Boolean);
+
+                let gh = null;
+                for (const u of candidates) {
+                  const m = String(u).match(/github\.com\/([^\/]+\/[^\/#]+)/i);
+                  if (m) { gh = m[1].replace(/\.git$/, ''); break; }
+                }
+
+                if (gh) {
+                  const [owner, repo] = gh.split('/');
+                  try {
+                    const repoData = await github.rest.repos.get({ owner, repo });
+                    const r = repoData.data;
+                    const stars = r.stargazers_count ?? 0;
+                    const forks = r.forks_count ?? 0;
+                    const openIssues = r.open_issues_count ?? 0;
+                    const pushedAt = r.pushed_at ? new Date(r.pushed_at) : null;
+                    const daysSincePush = pushedAt ? Math.floor((Date.now() - pushedAt.getTime())/86400000) : null;
+
+                    Object.assign(health.metrics, {
+                      githubUrl: r.html_url,
+                      stars, forks, openIssues,
+                      daysSinceLastCommit: daysSincePush
+                    });
+
+                    // Stars score (20)
+                    const starsScore = Math.min(20, (stars / 1000) * 20);
+                    health.score += starsScore;
+
+                    // Activity score (30)
+                    let act = 30;
+                    if (daysSincePush === null) { act = 10; }
+                    else if (daysSincePush > 365) { act = 5; health.warnings.push('⚠️ No commits in over 1 year'); }
+                    else if (daysSincePush > 180) { act = 15; }
+                    else if (daysSincePush > 90) { act = 25; }
+                    health.score += act;
+
+                    // Issue ratio score (20)
+                    const ratio = openIssues / Math.max(stars, 1);
+                    let issueScore = 20;
+                    if (ratio > 0.5) { issueScore = 5; health.warnings.push('⚠️ High ratio of open issues'); }
+                    else if (ratio > 0.2) { issueScore = 15; }
+                    health.score += issueScore;
+
+                  } catch (e) {
+                    core?.info?.(`GitHub fetch failed for ${gh}: ${e.message}`);
                   }
                 }
+              } catch (e) {
+                health.warnings.push(`PyPI fetch error: ${e.message}`);
               }
-            } else if (fs.existsSync('requirements.txt')) {
-              const reqs = fs.readFileSync('requirements.txt', 'utf8');
-              const lines = reqs.split('\n');
-              for (const line of lines) {
-                const cleaned = line.trim().split('==')[0].split('>=')[0].split('<=')[0].split('#')[0].trim();
-                if (cleaned && !cleaned.startsWith('-')) {
-                  dependencies.push(cleaned);
+
+              // Suggestions (include security context)
+              if ((health.metrics.vulnerabilityCount ?? 0) > 0) {
+                health.suggestions.push('Review and patch known vulnerabilities (see below).');
+              }
+              if (health.score < 40) {
+                health.suggestions.push('Consider alternatives; project may be inactive or risky.');
+              } else if (health.score < 60) {
+                health.suggestions.push('Monitor for updates and consider pinning/constraints.');
+              }
+              return health;
+            }
+
+            function formatDependency(dep, compact = false) {
+              let out = `### ${dep.name}\n\n`;
+              out += `**Health Score:** ${Math.round(dep.score)}/100 `;
+              out += dep.score >= 70 ? '✅\n\n' : dep.score >= 40 ? '⚠️\n\n' : '🚨\n\n';
+
+              if (!compact && dep.metrics.githubUrl) out += `**Repository:** ${dep.metrics.githubUrl}\n\n`;
+
+              out += '**Metrics:**\n';
+              if (dep.metrics.latestVersion) out += `- Version: ${dep.metrics.latestVersion}\n`;
+              if (dep.metrics.daysSinceLastRelease !== undefined) out += `- Last release: ${dep.metrics.daysSinceLastRelease} days ago\n`;
+              if (dep.metrics.daysSinceLastCommit !== undefined) out += `- Last commit: ${dep.metrics.daysSinceLastCommit} days ago\n`;
+              if (dep.metrics.stars !== undefined) out += `- GitHub stars: ${dep.metrics.stars}\n`;
+              if (dep.metrics.openIssues !== undefined) out += `- Open issues: ${dep.metrics.openIssues}\n`;
+              if (dep.metrics.vulnerabilityCount !== undefined) out += `- Vulnerabilities: ${dep.metrics.vulnerabilityCount}\n`;
+
+              // Security details (only when not compact)
+              if (!compact && dep.vulns && dep.vulns.length) {
+                out += '\n**Vulnerabilities:**\n';
+                for (const v of dep.vulns) {
+                  const id = v.id || v.cve || 'Advisory';
+                  const sev = v.severity ? ` (${v.severity})` : '';
+                  const fix = v.fix_version ? ` → fix: ${v.fix_version}` : '';
+                  out += `- ${id}${sev}: ${v.advisory || ''}${fix}\n`;
                 }
               }
-            }
-            
-            console.log(`Found ${dependencies.length} dependencies to analyze`);
-            
-            // Analyze each dependency
-            const results = [];
-            for (const dep of dependencies.slice(0, 20)) { // Limit to avoid rate limits
-              try {
-                const healthData = await analyzeDependency(dep, github);
-                results.push(healthData);
-              } catch (error) {
-                console.log(`Error analyzing ${dep}: ${error.message}`);
+
+              if (dep.warnings.length && !compact) {
+                out += '\n**Warnings:**\n';
+                for (const w of dep.warnings) out += `- ${w}\n`;
               }
+
+              if (dep.suggestions.length && !compact) {
+                out += '\n**Suggestions:**\n';
+                for (const s of dep.suggestions) out += `- ${s}\n`;
+              }
+
+              out += '\n';
+              return out;
             }
-            
-            // Generate report
+
+            function generateReport(results) {
+              const critical = results.filter(r => r.score < 40);
+              const warning = results.filter(r => r.score >= 40 && r.score < 70);
+              const healthy = results.filter(r => r.score >= 70);
+
+              let md = '# 🏥 Python Dependency Health Report\n\n';
+              md += `**Analysis Date:** ${new Date().toISOString().split('T')[0]}\n\n`;
+              md += '## 📊 Summary\n\n';
+              md += `- ✅ **Healthy:** ${healthy.length} dependencies\n`;
+              md += `- ⚠️ **Warning:** ${warning.length} dependencies\n`;
+              md += `- 🚨 **Critical:** ${critical.length} dependencies\n\n`;
+
+              if (critical.length) {
+                md += '## 🚨 Critical Dependencies (Score < 40)\n\n';
+                for (const d of critical) md += formatDependency(d);
+              }
+              if (warning.length) {
+                md += '## ⚠️ Dependencies Needing Attention (Score 40–69)\n\n';
+                for (const d of warning) md += formatDependency(d);
+              }
+              if (healthy.length) {
+                md += '## ✅ Healthy Dependencies (Score 70+)\n\n';
+                md += '<details>\n<summary>Click to expand healthy dependencies</summary>\n\n';
+                for (const d of healthy) md += formatDependency(d, true);
+                md += '</details>\n\n';
+              }
+
+              md += '\n---\n*Generated by Dependency Health Checker*';
+              return md;
+            }
+
+            // -------- Main --------
+            const results = [];
+            for (const dep of dependencies) {
+              try { results.push(await analyzeDependency(dep)); }
+              catch (e) { core?.warning?.(`Analyze failed for ${dep}: ${e.message}`); }
+            }
+
             const report = generateReport(results);
-            
-            // Post as PR comment or create issue
+
             if (context.eventName === 'pull_request') {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -111,14 +379,12 @@ jobs:
                 body: report
               });
             } else {
-              // Create or update an issue for scheduled runs
               const issues = await github.rest.issues.listForRepo({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 state: 'open',
                 labels: 'dependency-health'
               });
-              
               if (issues.data.length > 0) {
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
@@ -135,217 +401,4 @@ jobs:
                   labels: ['dependency-health']
                 });
               }
-            }
-            
-            async function analyzeDependency(packageName, github) {
-              const health = {
-                name: packageName,
-                score: 0,
-                metrics: {},
-                warnings: [],
-                suggestions: []
-              };
-              
-              try {
-                // Get PyPI data
-                const pypiResponse = await fetch(`https://pypi.org/pypi/${packageName}/json`);
-                if (!pypiResponse.ok) {
-                  health.warnings.push('Package not found on PyPI');
-                  return health;
-                }
-                
-                const pypiData = await pypiResponse.json();
-                const info = pypiData.info;
-                
-                // Extract GitHub repo if available
-                let githubRepo = null;
-                const urls = [info.home_page, info.project_url, info.bugtrack_url].filter(Boolean);
-                for (const url of urls) {
-                  const match = url.match(/github\.com\/([^\/]+\/[^\/]+)/);
-                  if (match) {
-                    githubRepo = match[1].replace(/\.git$/, '');
-                    break;
-                  }
-                }
-                
-                // Analyze PyPI metrics
-                const releases = Object.keys(pypiData.releases);
-                const latestVersion = info.version;
-                const latestReleaseDate = new Date(pypiData.releases[latestVersion]?.[0]?.upload_time || 0);
-                const daysSinceRelease = (Date.now() - latestReleaseDate.getTime()) / (1000 * 60 * 60 * 24);
-                
-                health.metrics.latestVersion = latestVersion;
-                health.metrics.daysSinceLastRelease = Math.floor(daysSinceRelease);
-                health.metrics.totalReleases = releases.length;
-                
-                // Score: Recency (30 points)
-                let recencyScore = 30;
-                if (daysSinceRelease > 730) { // 2 years
-                  recencyScore = 5;
-                  health.warnings.push('⚠️ No release in over 2 years - may be abandoned');
-                } else if (daysSinceRelease > 365) { // 1 year
-                  recencyScore = 15;
-                  health.warnings.push('⚠️ No release in over 1 year');
-                } else if (daysSinceRelease > 180) { // 6 months
-                  recencyScore = 25;
-                }
-                health.score += recencyScore;
-                
-                // Analyze GitHub metrics if repo found
-                if (githubRepo) {
-                  try {
-                    const [owner, repo] = githubRepo.split('/');
-                    const repoData = await github.rest.repos.get({ owner, repo });
-                    
-                    health.metrics.stars = repoData.data.stargazers_count;
-                    health.metrics.forks = repoData.data.forks_count;
-                    health.metrics.openIssues = repoData.data.open_issues_count;
-                    health.metrics.githubUrl = repoData.data.html_url;
-                    
-                    const lastPush = new Date(repoData.data.pushed_at);
-                    const daysSincePush = (Date.now() - lastPush.getTime()) / (1000 * 60 * 60 * 24);
-                    health.metrics.daysSinceLastCommit = Math.floor(daysSincePush);
-                    
-                    // Score: Stars (20 points)
-                    let starsScore = Math.min(20, (health.metrics.stars / 1000) * 20);
-                    health.score += starsScore;
-                    
-                    // Score: Activity (30 points)
-                    let activityScore = 30;
-                    if (daysSincePush > 365) {
-                      activityScore = 5;
-                      health.warnings.push('⚠️ No commits in over 1 year');
-                    } else if (daysSincePush > 180) {
-                      activityScore = 15;
-                    } else if (daysSincePush > 90) {
-                      activityScore = 25;
-                    }
-                    health.score += activityScore;
-                    
-                    // Score: Issues (20 points)
-                    const issueRatio = health.metrics.openIssues / Math.max(health.metrics.stars, 1);
-                    let issueScore = 20;
-                    if (issueRatio > 0.5) {
-                      issueScore = 5;
-                      health.warnings.push('⚠️ High ratio of open issues');
-                    } else if (issueRatio > 0.2) {
-                      issueScore = 15;
-                    }
-                    health.score += issueScore;
-                    
-                  } catch (ghError) {
-                    console.log(`Could not fetch GitHub data for ${githubRepo}: ${ghError.message}`);
-                  }
-                }
-                
-                // Check for common issues
-                if (!info.license) {
-                  health.warnings.push('⚠️ No license specified');
-                }
-                
-                if (releases.length < 5) {
-                  health.warnings.push('⚠️ Few releases - may be early stage');
-                }
-                
-                // Generate suggestions based on score
-                if (health.score < 40) {
-                  health.suggestions.push('Consider finding a more actively maintained alternative');
-                } else if (health.score < 60) {
-                  health.suggestions.push('Monitor this dependency closely for updates');
-                }
-                
-              } catch (error) {
-                health.warnings.push(`Error analyzing: ${error.message}`);
-              }
-              
-              return health;
-            }
-            
-            function generateReport(results) {
-              let report = '# 🏥 Python Dependency Health Report\n\n';
-              report += `**Analysis Date:** ${new Date().toISOString().split('T')[0]}\n\n`;
-              
-              // Categorize by health
-              const critical = results.filter(r => r.score < 40);
-              const warning = results.filter(r => r.score >= 40 && r.score < 70);
-              const healthy = results.filter(r => r.score >= 70);
-              
-              report += '## 📊 Summary\n\n';
-              report += `- ✅ **Healthy:** ${healthy.length} dependencies\n`;
-              report += `- ⚠️ **Warning:** ${warning.length} dependencies\n`;
-              report += `- 🚨 **Critical:** ${critical.length} dependencies\n\n`;
-              
-              if (critical.length > 0) {
-                report += '## 🚨 Critical Dependencies (Score < 40)\n\n';
-                for (const dep of critical) {
-                  report += formatDependency(dep);
-                }
-              }
-              
-              if (warning.length > 0) {
-                report += '## ⚠️ Dependencies Needing Attention (Score 40-69)\n\n';
-                for (const dep of warning) {
-                  report += formatDependency(dep);
-                }
-              }
-              
-              if (healthy.length > 0) {
-                report += '## ✅ Healthy Dependencies (Score 70+)\n\n';
-                report += '<details>\n<summary>Click to expand healthy dependencies</summary>\n\n';
-                for (const dep of healthy) {
-                  report += formatDependency(dep, true);
-                }
-                report += '</details>\n\n';
-              }
-              
-              report += '\n---\n*Generated by Dependency Health Checker*';
-              
-              return report;
-            }
-            
-            function formatDependency(dep, compact = false) {
-              let output = `### ${dep.name}\n\n`;
-              output += `**Health Score:** ${Math.round(dep.score)}/100 `;
-              
-              if (dep.score >= 70) output += '✅\n\n';
-              else if (dep.score >= 40) output += '⚠️\n\n';
-              else output += '🚨\n\n';
-              
-              if (!compact && dep.metrics.githubUrl) {
-                output += `**Repository:** ${dep.metrics.githubUrl}\n\n`;
-              }
-              
-              output += '**Metrics:**\n';
-              if (dep.metrics.latestVersion) {
-                output += `- Version: ${dep.metrics.latestVersion}\n`;
-              }
-              if (dep.metrics.daysSinceLastRelease !== undefined) {
-                output += `- Last release: ${dep.metrics.daysSinceLastRelease} days ago\n`;
-              }
-              if (dep.metrics.daysSinceLastCommit !== undefined) {
-                output += `- Last commit: ${dep.metrics.daysSinceLastCommit} days ago\n`;
-              }
-              if (dep.metrics.stars) {
-                output += `- GitHub stars: ${dep.metrics.stars}\n`;
-              }
-              if (dep.metrics.openIssues !== undefined) {
-                output += `- Open issues: ${dep.metrics.openIssues}\n`;
-              }
-              
-              if (dep.warnings.length > 0 && !compact) {
-                output += '\n**Warnings:**\n';
-                for (const warning of dep.warnings) {
-                  output += `- ${warning}\n`;
-                }
-              }
-              
-              if (dep.suggestions.length > 0 && !compact) {
-                output += '\n**Suggestions:**\n';
-                for (const suggestion of dep.suggestions) {
-                  output += `- ${suggestion}\n`;
-                }
-              }
-              
-              output += '\n';
-              return output;
             }
