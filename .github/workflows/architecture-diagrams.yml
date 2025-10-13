@@ -1647,52 +1647,45 @@ jobs:
             const fs = require('fs');
             const path = require('path');
             const { execSync } = require('child_process');
-            
+
             console.log('Analyzing test coverage...');
-            
+
             function runCoverageAnalysis() {
               try {
-                // Run pytest with coverage if tests exist
                 if (fs.existsSync('tests') || fs.existsSync('test')) {
                   console.log('Running tests with coverage...');
-                  execSync('python -m pytest --cov=. --cov-report=json --cov-report=html -q || true', { 
+                  execSync('python -m pytest --cov=. --cov-report=json --cov-report=html -q || true', {
                     encoding: 'utf8',
                     stdio: 'inherit'
                   });
-                  
                   if (fs.existsSync('coverage.json')) {
-                    const coverage = JSON.parse(fs.readFileSync('coverage.json', 'utf8'));
-                    return coverage;
+                    return JSON.parse(fs.readFileSync('coverage.json', 'utf8'));
                   }
+                } else {
+                  console.log('No tests directory found; skipping coverage run.');
                 }
               } catch (err) {
                 console.log('Coverage analysis skipped:', err.message);
               }
               return null;
             }
-            
+
             function mapCoverageToArchitecture(coverage) {
               if (!coverage || !coverage.files) return null;
-              
+
               const modulesCoverage = new Map();
-              
+
               for (const [filePath, fileData] of Object.entries(coverage.files)) {
-                const relativePath = filePath.replace(process.cwd(), '').replace(/^\//, '');
-                const parts = relativePath.split('/');
-                
-                // Skip test files and non-Python files
-                if (parts.includes('test') || parts.includes('tests') || !filePath.endsWith('.py')) {
-                  continue;
-                }
-                
+                const relativePath = filePath.replace(process.cwd(), '').replace(/^[\\/]/, '');
+                const parts = relativePath.split(/[\\/]/);
+
+                // Skip tests and non-Python
+                if (parts.includes('test') || parts.includes('tests') || !filePath.endsWith('.py')) continue;
+
                 // Determine module name
                 let moduleName = parts[0];
-                if (parts.length > 1 && parts[0] !== 'src') {
-                  moduleName = parts[0];
-                } else if (parts.length > 2) {
-                  moduleName = parts[1];
-                }
-                
+                if (parts[0] === 'src' && parts.length > 1) moduleName = parts[1];
+
                 if (!modulesCoverage.has(moduleName)) {
                   modulesCoverage.set(moduleName, {
                     files: [],
@@ -1702,103 +1695,132 @@ jobs:
                     excludedLines: 0
                   });
                 }
-                
+
                 const module = modulesCoverage.get(moduleName);
                 module.files.push(relativePath);
-                
-                const summary = fileData.summary;
+
+                const summary = fileData.summary || {};
                 module.totalStatements += summary.num_statements || 0;
                 module.coveredStatements += summary.covered_lines || 0;
                 module.missingLines += summary.missing_lines || 0;
                 module.excludedLines += summary.excluded_lines || 0;
               }
-              
-              // Calculate percentages
-              for (const [name, data] of modulesCoverage) {
-                data.percentage = data.totalStatements > 0 
-                  ? (data.coveredStatements / data.totalStatements) * 100 
+
+              for (const [, data] of modulesCoverage) {
+                data.percentage = data.totalStatements
+                  ? (data.coveredStatements / data.totalStatements) * 100
                   : 0;
               }
-              
               return modulesCoverage;
             }
-            
+
             function generateCoverageDiagram(modulesCoverage) {
               let dot = 'digraph Coverage {\n';
               dot += '  rankdir=TB;\n';
               dot += '  node [shape=box, style="rounded,filled"];\n\n';
-              
-              const sortedModules = Array.from(modulesCoverage.entries())
+
+              const sorted = Array.from(modulesCoverage.entries())
                 .sort((a, b) => a[1].percentage - b[1].percentage);
-              
-              for (const [name, data] of sortedModules) {
-                let color = '#90EE90';  // Green - good coverage
-                if (data.percentage < 50) color = '#FF6B6B';  // Red - poor coverage
-                else if (data.percentage < 70) color = '#FFA500';  // Orange - needs improvement
-                else if (data.percentage < 85) color = '#FFD93D';  // Yellow - okay coverage
-                
-                const label = `${name}\\n${data.percentage.toFixed(1)}% covered\\n` +
-                             `${data.coveredStatements}/${data.totalStatements} statements`;
-                
+
+              for (const [name, d] of sorted) {
+                let color = '#90EE90';
+                if (d.percentage < 50) color = '#FF6B6B';
+                else if (d.percentage < 70) color = '#FFA500';
+                else if (d.percentage < 85) color = '#FFD93D';
+
+                const label = `${name}\\n${d.percentage.toFixed(1)}% covered\\n${d.coveredStatements}/${d.totalStatements} statements`;
                 dot += `  "${name}" [label="${label}", fillcolor="${color}"];\n`;
               }
-              
               dot += '}\n';
               return dot;
             }
-            
+
             function generateCoverageReport(modulesCoverage, totalCoverage) {
               let report = '# Test Coverage Mapping\n\n';
               report += '*Auto-generated test coverage analysis*\n\n';
-              
-              if (totalCoverage) {
+
+              if (totalCoverage?.totals) {
                 report += '## Overall Coverage\n\n';
-                report += `**Total Coverage: ${totalCoverage.totals.percent_covered.toFixed(2)}%**\n\n`;
+                report += `**Total Coverage: ${Number(totalCoverage.totals.percent_covered || 0).toFixed(2)}%**\n\n`;
                 report += `- Covered Lines: ${totalCoverage.totals.covered_lines}\n`;
                 report += `- Total Statements: ${totalCoverage.totals.num_statements}\n`;
                 report += `- Missing Lines: ${totalCoverage.totals.missing_lines}\n\n`;
               }
-              
-              const poorCoverage = Array.from(modulesCoverage.entries())
-                .filter(([_, data]) => data.percentage < 70)
+
+              const entries = Array.from(modulesCoverage.entries());
+
+              const poor = entries
+                .filter(([, d]) => d.percentage < 70)
                 .sort((a, b) => a[1].percentage - b[1].percentage);
-              
-              const goodCoverage = Array.from(modulesCoverage.entries())
-                .filter(([_, data]) => data.percentage >= 85);
-              
-              if (poorCoverage.length > 0) {
+
+              const good = entries
+                .filter(([, d]) => d.percentage >= 85)
+                .sort((a, b) => b[1].percentage - a[1].percentage);
+
+              if (poor.length) {
                 report += '## 🔴 Modules Needing Test Coverage\n\n';
                 report += '| Module | Coverage | Covered | Total | Missing Lines |\n';
                 report += '|--------|----------|---------|-------|---------------|\n';
-                
-                for (const [name, data] of poorCoverage) {
-                  const coverageEmoji = data.percentage < 50 ? '🔴' : '🟡';
-                  report += `| ${name} | ${coverageEmoji} ${data.percentage.toFixed(1)}% | `;
-                  report += `${data.coveredStatements} | ${data.totalStatements} | ${data.missingLines} |\n`;
+                for (const [name, d] of poor) {
+                  const emoji = d.percentage < 50 ? '🔴' : '🟡';
+                  report += `| ${name} | ${emoji} ${d.percentage.toFixed(1)}% | ${d.coveredStatements} | ${d.totalStatements} | ${d.missingLines} |\n`;
                 }
                 report += '\n';
               }
-              
-              if (goodCoverage.length > 0) {
+
+              if (good.length) {
                 report += '## ✅ Well-Tested Modules\n\n';
                 report += '| Module | Coverage | Covered | Total |\n';
                 report += '|--------|----------|---------|-------|\n';
-                
-                for (const [name, data] of goodCoverage) {
-                  report += `| ${name} | 🟢 ${data.percentage.toFixed(1)}% | `;
-                  report += `${data.coveredStatements} | ${data.totalStatements} |\n`;
+                for (const [name, d] of good) {
+                  report += `| ${name} | 🟢 ${d.percentage.toFixed(1)}% | ${d.coveredStatements} | ${d.totalStatements} |\n`;
                 }
                 report += '\n';
               }
-              
+
               report += '## All Modules\n\n';
               report += '| Module | Coverage | Covered | Total | Files |\n';
               report += '|--------|----------|---------|-------|-------|\n';
-              
-              const allModules = Array.from(modulesCoverage.entries())
-                .sort((a, b) => b[1].percentage - a[1].percentage);
-              
-              for (const [name, data] of allModules) {
-                report += `| ${name} | ${data.percentage.toFixed(1)}% | `;
-                report += `${data.coveredStatements} | ${data.totalStatements} |name: Auto-Generate Architecture Diagrams
-            
+
+              const all = entries.sort((a, b) => b[1].percentage - a[1].percentage);
+              for (const [name, d] of all) {
+                report += `| ${name} | ${d.percentage.toFixed(1)}% | ${d.coveredStatements} | ${d.totalStatements} | ${d.files.length} |\n`;
+              }
+
+              return report;
+            }
+
+            // Execute
+            try {
+              fs.mkdirSync('docs/architecture', { recursive: true });
+              fs.mkdirSync('.architecture-temp', { recursive: true });
+
+              const coverage = runCoverageAnalysis();
+              if (!coverage) {
+                console.log('No coverage.json present; skipping coverage artifacts.');
+                return;
+              }
+
+              const modulesCoverage = mapCoverageToArchitecture(coverage);
+              if (!modulesCoverage || modulesCoverage.size === 0) {
+                console.log('No module coverage to report.');
+                return;
+              }
+
+              const report = generateCoverageReport(modulesCoverage, coverage);
+              fs.writeFileSync('docs/architecture/COVERAGE.md', report);
+
+              const dot = generateCoverageDiagram(modulesCoverage);
+              const dotPath = '.architecture-temp/coverage-map.dot';
+              fs.writeFileSync(dotPath, dot);
+
+              try {
+                execSync(`dot -Tsvg ${dotPath} -o docs/architecture/coverage-map.svg`);
+                execSync(`dot -Tpng ${dotPath} -o docs/architecture/coverage-map.png`);
+                console.log('Coverage diagrams generated.');
+              } catch (e) {
+                console.log('Graphviz conversion failed:', e.message);
+              }
+            } catch (error) {
+              console.error('Coverage mapping failed:', error);
+            }
