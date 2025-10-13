@@ -1,0 +1,114 @@
+classDiagram
+  class PerformanceEvaluator {
+    +run_monte_carlo_reference()
+    +compare_methods()
+  }
+
+  class AdvancedAnalysis {
+    +analyze_component_evolution()
+    +analyze_sample_distribution()
+  }
+
+  class vMFNMParameters {
+    +K()
+    +d()
+  }
+
+  class SafeICE {
+    +g
+    +d
+    +K0
+    +delta_target
+    +delta_star
+    +run()
+    +cv_objective()
+  }
+
+  class vMFNMDistribution {
+    +params
+    +pdf()
+    +sample()
+    +log_likelihood()
+  }
+
+  class NakagamiDistribution {
+    +pdf()
+    +sample()
+    +cdf()
+  }
+
+  class InverseNakagamiDistribution {
+    +pdf()
+    +sample()
+  }
+
+  class VonMisesFisherSampler {
+    +sample()
+  }
+
+  class PenalizedEMOptimizer {
+    +max_em_iterations
+    +em_tolerance
+    +fit()
+  }
+
+  class BenchmarkProblems {
+    +four_mode_series_system()
+    +limit_state_function()
+    +three_mode_problem()
+    +limit_state_function()
+    +nonlinear_oscillator_simplified()
+    +limit_state_function()
+    +two_mode_opposite_directions()
+    +limit_state_function()
+  }
+
+  class HeatTransferProblem {
+    +grid_size
+    +l
+    +n_terms
+    +Q
+    +domain
+    +generate_permeability_field()
+    +solve_heat_equation()
+    +create_limit_state_function()
+    +limit_state_function()
+  }
+
+  class TestVonMisesFisherSampler {
+    +test_sample_shape()
+    +test_samples_are_unit_vectors()
+    +test_zero_kappa_uniform()
+    +test_high_kappa_concentration()
+    +test_circular_vmf()
+  }
+
+  class TestNakagamiDistribution {
+    +test_pdf_positive()
+    +test_pdf_zero_at_zero()
+    +test_sample_shape()
+    +test_sample_mean_approximation()
+    +test_cdf_bounds()
+  }
+
+  class TestInverseNakagamiDistribution {
+    +test_pdf_positive()
+    +test_sample_positive()
+    +test_heavy_tail_property()
+  }
+
+  class TestvMFNMDistribution {
+    +simple_params_2d()
+    +test_initialization()
+    +test_pdf_positive()
+    +test_sample_shape()
+    +test_sample_pdf_consistency()
+    +test_log_likelihood()
+    +test_different_dimensions()
+  }
+
+  class TestIntegration {
+    +test_vmfnm_mixture_normalization()
+    +test_vmfnm_sampling_consistency()
+  }
+
