@@ -43,6 +43,32 @@ function readJSONSafe(filePath) {
   }
 }
 
+// Small utilities used by the Main section
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+// Split oversized comments to stay under GitHub limits (~65k)
+async function postLargeComment(issueNumber, body) {
+  const LIMIT = 60000; // safety margin
+  if (body.length <= LIMIT) {
+    await createIssueComment(issueNumber, body);
+    return;
+  }
+  const parts = [];
+  for (let i = 0; i < body.length; i += LIMIT) parts.push(body.slice(i, i + LIMIT));
+  for (let idx = 0; idx < parts.length; idx++) {
+    const header = parts.length > 1 ? `**Part ${idx + 1}/${parts.length}**\n\n` : '';
+    await createIssueComment(issueNumber, header + parts[idx]);
+  }
+}
+
 /// -------------------- Env + Context --------------------
 /** owner/repo */
 const repoSlug = process.env.GITHUB_REPOSITORY || "";
@@ -86,8 +112,10 @@ for (const item of auditJson) {
   });
 }
 
-const LIMIT = 40; // keep conservative to avoid timeouts/rate limits
-const DEPENDENCIES = (depsJson.direct || []).slice(0, LIMIT);
+const MAX = Number(process.env.DEP_HEALTH_MAX || Number.POSITIVE_INFINITY);
+const allDeps = Array.from(new Set(depsJson.direct || [])); // de-dup just in case
+const DEPENDENCIES = Number.isFinite(MAX) ? allDeps.slice(0, MAX) : allDeps;
+console.log(`🔎 Analyzing ${DEPENDENCIES.length} dependencies (MAX=${MAX})`);
 
 console.log(`🔎 Analyzing ${DEPENDENCIES.length} dependencies for ${OWNER}/${REPO} (event: ${EVENT_NAME})`);
 
@@ -380,25 +408,37 @@ function buildReport(results) {
 /// -------------------- Main --------------------
 (async () => {
   try {
+    // Concurrency knobs (override via env)
+    const BATCH = Number(process.env.DEP_HEALTH_BATCH || 10);     // how many deps at once
+    const PAUSE = Number(process.env.DEP_HEALTH_DELAY_MS || 500); // ms between batches
+
+    /** @type {Health[]} */
     const results = [];
-    for (const dep of DEPENDENCIES) {
-      try {
-        results.push(await analyzeDependency(dep));
-      } catch (e) {
-        console.warn(`Analyze failed for ${dep}: ${e.message}`);
+
+    // Process dependencies in parallel batches (polite & fast)
+    for (const group of chunk(DEPENDENCIES, BATCH)) {
+      const settled = await Promise.allSettled(group.map(d => analyzeDependency(d)));
+
+      for (let i = 0; i < settled.length; i++) {
+        const s = settled[i];
+        const name = group[i];
+        if (s.status === 'fulfilled') {
+          results.push(s.value);
+        } else {
+          console.warn(`Analyze failed for ${name}: ${s.reason?.message || s.reason}`);
+        }
       }
+
+      // brief pause between batches to be gentle with APIs
+      if (PAUSE > 0) await sleep(PAUSE);
     }
 
     const report = buildReport(results);
 
     if (EVENT_NAME === "pull_request") {
-      const prNumber =
-        EVENT?.pull_request?.number ??
-        EVENT?.number; // fallback just in case
-      if (!prNumber) {
-        throw new Error("PR number not found in event payload.");
-      }
-      await createIssueComment(prNumber, report);
+      const prNumber = EVENT?.pull_request?.number ?? EVENT?.number; // fallback
+      if (!prNumber) throw new Error("PR number not found in event payload.");
+      await postLargeComment(prNumber, report); // handles long reports
       console.log(`📝 Commented health report on PR #${prNumber}`);
     } else {
       // scheduled / workflow_dispatch: create or update rolling issue
@@ -406,7 +446,7 @@ function buildReport(results) {
       const open = await listOpenIssuesByLabel(label);
       if (Array.isArray(open) && open.length > 0) {
         const issueNumber = open[0].number;
-        await createIssueComment(issueNumber, `## Updated Health Report\n\n${report}`);
+        await postLargeComment(issueNumber, `## Updated Health Report\n\n${report}`);
         console.log(`🔁 Updated health report on Issue #${issueNumber}`);
       } else {
         const created = await createIssue("🏥 Dependency Health Report", report, [label]);

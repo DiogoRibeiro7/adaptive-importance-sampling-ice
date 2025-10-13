@@ -124,6 +124,8 @@ jobs:
 
       - name: Dependency Health Analyzer (node)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          node .github/tools/deps_health.js
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            DEP_HEALTH_BATCH: "10"
+            DEP_HEALTH_DELAY_MS: "500"
+            DEP_HEALTH_MAX: "0"   # 0/unset = all deps
+        run: node .github/tools/deps_health.js
