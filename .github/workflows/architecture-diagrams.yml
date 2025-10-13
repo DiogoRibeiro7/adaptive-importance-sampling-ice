@@ -41,6 +41,15 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            graphviz \
+            libgraphviz-dev \
+            pkg-config \
+            build-essential
+
       - name: Install Python analysis tools
         run: |
           pip install --upgrade pip
@@ -49,16 +58,12 @@ jobs:
           pip install pylint==3.0.3
           pip install ast-grep-py==0.15.1
           pip install pipdeptree==2.13.1
-          pip install sqlalchemy  # For DB diagram generation
-          pip install eralchemy2   # For ER diagrams
-          pip install pytest-cov   # For coverage analysis
-          pip install radon        # For complexity metrics
-          pip install coverage     # Coverage tools
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y graphviz
+          pip install sqlalchemy
+          pip install "pygraphviz>=1.12,<2.0"
+          pip install eralchemy2
+          pip install pytest-cov
+          pip install radon
+          pip install coverage
 
       - name: Install project dependencies
         run: |
@@ -1796,3 +1801,4 @@ jobs:
               for (const [name, data] of allModules) {
                 report += `| ${name} | ${data.percentage.toFixed(1)}% | `;
                 report += `${data.coveredStatements} | ${data.totalStatements} |name: Auto-Generate Architecture Diagrams
+            
