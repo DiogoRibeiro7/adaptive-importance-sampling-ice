@@ -1,24 +1,76 @@
-"""Main Safe-ICE algorithm implementation."""
+# safe_ice/core/safe_ice.py
+"""Main Safe-ICE algorithm implementation.
 
+This module implements the Safe Cross-Entropy Importance Sampling (Safe-ICE)
+procedure end-to-end, with careful typing to satisfy mypy under strict NumPy
+stubs. It keeps NumPy arrays as explicit float64 ndarrays (NDArrayF) and
+converts NumPy scalars to Python floats at API boundaries to avoid Any leaks.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Callable, Dict, List, Tuple, TypedDict
+
+import math
 import numpy as np
+import numpy.typing as npt
 import scipy.stats as stats
-from scipy.special import gamma
 from scipy.optimize import minimize_scalar
-from typing import Tuple, Callable, Dict, Any
+from scipy.special import gamma
 
 from .parameters import vMFNMParameters
 from ..distributions.mixture import vMFNMDistribution
-from ..distributions.nakagami import NakagamiDistribution, InverseNakagamiDistribution
+from ..distributions.nakagami import (
+    InverseNakagamiDistribution,
+    NakagamiDistribution,
+)
 from ..distributions.vmf import VonMisesFisherSampler
 from ..optimization.penalized_em import PenalizedEMOptimizer
 
 
+# ----------------------------
+# Typing aliases and structures
+# ----------------------------
+NDArrayF = npt.NDArray[np.float64]
+
+
+class _SafeICEHistory(TypedDict):
+    """History container for monitoring algorithm progress."""
+    sigma: List[float]
+    cv: List[float]
+    components: List[int]
+    lambda_val: List[float]
+    pf_estimates: List[float]
+
+
 class SafeICE:
-    """Complete Safe Cross-Entropy Importance Sampling implementation"""
+    """Complete Safe Cross-Entropy Importance Sampling implementation.
+
+    Parameters
+    ----------
+    limit_state_function:
+        Function g(u) such that failure occurs when g(u) <= 0.
+    dimension:
+        Problem dimension d.
+    K0:
+        Initial number of mixture components in the vMF-Nakagami mixture.
+    delta_target:
+        Target coefficient of variation used when adapting sigma.
+    delta_star:
+        CV stopping threshold.
+    max_iterations:
+        Maximum number of outer ICE iterations.
+    N:
+        Number of samples per iteration.
+    sigma0:
+        Initial smoothing parameter for the smoothed indicator.
+    em_max_iter:
+        Maximum EM iterations per ICE step.
+    """
 
     def __init__(
         self,
-        limit_state_function: Callable[[np.ndarray], float],
+        limit_state_function: Callable[[NDArrayF], float],
         dimension: int,
         K0: int = 20,
         delta_target: float = 4.0,
@@ -28,50 +80,41 @@ class SafeICE:
         sigma0: float = 1.0,
         em_max_iter: int = 100,
     ) -> None:
-        """
-        Initialize Safe-ICE algorithm
-
-        Args:
-            limit_state_function: g(u) where failure when g(u) <= 0
-            dimension: problem dimension
-            K0: initial number of mixture components
-            delta_target: target coefficient of variation for sigma adaptation
-            delta_star: CV threshold for stopping criterion
-            max_iterations: maximum ICE iterations
-            N: samples per iteration
-            sigma0: initial smoothing parameter
-            em_max_iter: maximum EM iterations per ICE step
-        """
         self.g = limit_state_function
-        self.d = dimension
-        self.K0 = K0
-        self.delta_target = delta_target
-        self.delta_star = delta_star
-        self.max_iterations = max_iterations
-        self.N = N
-        self.sigma0 = sigma0
+        self.d = int(dimension)
+        self.K0 = int(K0)
+        self.delta_target = float(delta_target)
+        self.delta_star = float(delta_star)
+        self.max_iterations = int(max_iterations)
+        self.N = int(N)
+        self.sigma0 = float(sigma0)
 
         # Initialize EM optimizer
-        self.em_optimizer = PenalizedEMOptimizer(max_em_iterations=em_max_iter)
+        self.em_optimizer = PenalizedEMOptimizer(max_em_iterations=int(em_max_iter))
 
-        # History tracking
-        self.history = {
+        # History tracking (typed)
+        self.history: _SafeICEHistory = {
             "sigma": [],
             "cv": [],
             "components": [],
-            "lambda": [],
+            "lambda_val": [],
             "pf_estimates": [],
         }
 
+    # -------------------------------------------------------------------------
+    # Public API
+    # -------------------------------------------------------------------------
     def run(self, verbose: bool = True) -> Tuple[float, Dict[str, Any]]:
-        """
-        Execute the complete Safe-ICE algorithm
+        """Execute the complete Safe-ICE algorithm.
 
-        Returns:
-            failure_probability_estimate, results_dictionary
+        Returns
+        -------
+        Tuple[float, Dict[str, Any]]
+            Estimated failure probability and a results dictionary containing
+            diagnostics, final parameters, and traces.
         """
         if verbose:
-            print(f"Safe-ICE Algorithm")
+            print("Safe-ICE Algorithm")
             print(f"Problem dimension: {self.d}")
             print(f"Initial components: {self.K0}")
             print(f"Samples per iteration: {self.N}")
@@ -79,13 +122,14 @@ class SafeICE:
 
         # Initialize parameters
         t = 0
-        sigma_t = self.sigma0
-        M = self.sigma0  # Cosine annealing parameter
+        sigma_t: float = float(self.sigma0)
+        M: float = float(self.sigma0)  # cosine annealing scale
 
-        # Initialize vMFNM parameters
-        phi_t = self._initialize_vmfnm_parameters()
-        lambda_t = self._cosine_annealing_schedule(sigma_t, M)
+        # Initialize vMFNM parameters and annealing
+        phi_t: vMFNMParameters = self._initialize_vmfnm_parameters()
+        lambda_t: float = self._cosine_annealing_schedule(sigma_t, M)
 
+        # Main loop
         while t < self.max_iterations:
             if verbose:
                 print(
@@ -93,27 +137,29 @@ class SafeICE:
                 )
 
             # Step 2: Generate samples from safe mixture
-            samples = self._generate_safe_mixture_samples(phi_t, lambda_t)
+            samples: NDArrayF = self._generate_safe_mixture_samples(phi_t, lambda_t)
 
             # Evaluate limit state function
-            g_values = np.array([self.g(sample) for sample in samples])
+            g_values: NDArrayF = np.asarray(
+                [float(self.g(sample)) for sample in samples], dtype=np.float64
+            )
 
-            # Step 3: Calculate stopping weights and CV
-            stopping_weights = self._calculate_stopping_weights(
+            # Step 3: Stopping weights and CV
+            stopping_weights: NDArrayF = self._calculate_stopping_weights(
                 samples, g_values, sigma_t, phi_t, lambda_t
             )
-            cv_w_star = self._coefficient_of_variation(stopping_weights)
+            cv_w_star: float = self._coefficient_of_variation(stopping_weights)
 
-            # Store history
-            self.history["sigma"].append(sigma_t)
-            self.history["cv"].append(cv_w_star)
-            self.history["components"].append(phi_t.K)
-            self.history["lambda"].append(lambda_t)
+            # Store history (explicit float)
+            self.history["sigma"].append(float(sigma_t))
+            self.history["cv"].append(float(cv_w_star))
+            self.history["components"].append(int(phi_t.K))
+            self.history["lambda_val"].append(float(lambda_t))
 
             if verbose:
                 print(f"           CV={cv_w_star:.4f}")
 
-            # Check stopping criterion
+            # Stopping criterion
             if cv_w_star <= self.delta_star:
                 if verbose:
                     print(f"Converged: CV {cv_w_star:.4f} ≤ {self.delta_star}")
@@ -129,25 +175,28 @@ class SafeICE:
                 samples, g_values, phi_t, sigma_t, lambda_t
             )
 
-            # Step 6: Update lambda
+            # Step 6: Update lambda via cosine annealing
             lambda_t = self._cosine_annealing_schedule(sigma_t, M)
 
             t += 1
 
-        # Final estimation
-        final_samples = self._generate_safe_mixture_samples(phi_t, lambda_t)
-        final_g_values = np.array([self.g(sample) for sample in final_samples])
-        pf_estimate = self._estimate_failure_probability(
+        # Final estimation pass (always compute)
+        final_samples: NDArrayF = self._generate_safe_mixture_samples(phi_t, lambda_t)
+        final_g_values: NDArrayF = np.asarray(
+            [float(self.g(sample)) for sample in final_samples], dtype=np.float64
+        )
+        pf_estimate: float = self._estimate_failure_probability(
             final_samples, final_g_values, phi_t, lambda_t
         )
+        self.history["pf_estimates"].append(float(pf_estimate))
 
-        results = {
-            "failure_probability": pf_estimate,
-            "iterations": t + 1,
-            "final_components": phi_t.K,
-            "final_sigma": sigma_t,
-            "final_cv": cv_w_star,
-            "final_lambda": lambda_t,
+        results: Dict[str, Any] = {
+            "failure_probability": float(pf_estimate),
+            "iterations": int(t + 1),
+            "final_components": int(phi_t.K),
+            "final_sigma": float(sigma_t),
+            "final_cv": float(cv_w_star),
+            "final_lambda": float(lambda_t),
             "final_samples": final_samples,
             "final_g_values": final_g_values,
             "history": self.history,
@@ -156,52 +205,61 @@ class SafeICE:
 
         if verbose:
             print("-" * 50)
-            print(f"Final Results:")
+            print("Final Results:")
             print(f"Failure Probability: {pf_estimate:.6e}")
             print(f"Total Iterations: {t + 1}")
             print(f"Final Components: {phi_t.K}")
             print(f"Final CV: {cv_w_star:.4f}")
 
-        return pf_estimate, results
+        return float(pf_estimate), results
 
+    # -------------------------------------------------------------------------
+    # Initialization & Schedules
+    # -------------------------------------------------------------------------
     def _initialize_vmfnm_parameters(self) -> vMFNMParameters:
-        """Initialize vMFNM mixture parameters"""
-        K = self.K0
-        d = self.d
+        """Initialize vMF-Nakagami mixture parameters."""
+        K = int(self.K0)
+        d = int(self.d)
 
         # Equal mixture weights
-        pi = np.ones(K) / K
+        pi: NDArrayF = np.ones(K, dtype=np.float64) / float(K)
 
-        # Initialize Nakagami parameters
-        m = np.random.uniform(1.0, 3.0, K)
-        Omega = np.random.uniform(0.5, 2.0, K)
+        # Nakagami parameters
+        m: NDArrayF = np.asarray(np.random.uniform(1.0, 3.0, K), dtype=np.float64)
+        Omega: NDArrayF = np.asarray(np.random.uniform(0.5, 2.0, K), dtype=np.float64)
 
-        # Initialize von Mises-Fisher parameters
-        # Random unit directions
-        mu = np.random.normal(0, 1, (K, d))
-        for k in range(K):
-            mu[k] = mu[k] / np.linalg.norm(mu[k])
+        # von Mises-Fisher parameters
+        mu: NDArrayF = np.asarray(np.random.normal(0.0, 1.0, (K, d)), dtype=np.float64)
+        # Normalize each row to unit norm
+        row_norms: NDArrayF = np.linalg.norm(mu, axis=1, keepdims=True).astype(
+            np.float64, copy=False
+        )
+        eps: float = float(np.finfo(np.float64).tiny)
+        mu = mu / np.maximum(row_norms, eps)
 
         # Small initial concentrations
-        kappa = np.random.uniform(0.1, 1.0, K)
+        kappa: NDArrayF = np.asarray(np.random.uniform(0.1, 1.0, K), dtype=np.float64)
 
         return vMFNMParameters(pi=pi, m=m, Omega=Omega, mu=mu, kappa=kappa)
 
     def _cosine_annealing_schedule(self, sigma: float, M: float) -> float:
-        """Cosine annealing schedule for lambda parameter"""
+        """Cosine annealing schedule for lambda parameter."""
         if sigma > M:
             return 0.0
-        else:
-            return 0.5 * (1 + np.cos(np.pi * sigma / M))
+        # Return Python float to avoid numpy floating[Any]
+        return float(0.5 * (1.0 + math.cos(math.pi * sigma / M)))
 
+    # -------------------------------------------------------------------------
+    # Sampling
+    # -------------------------------------------------------------------------
     def _generate_safe_mixture_samples(
         self, params: vMFNMParameters, lambda_val: float
-    ) -> np.ndarray:
-        """Generate samples from safe mixture q_safe(u; φ)"""
-        samples = np.zeros((self.N, self.d))
+    ) -> NDArrayF:
+        """Generate samples from the safe mixture q_safe(u; φ)."""
+        samples: NDArrayF = np.zeros((self.N, self.d), dtype=np.float64)
 
         for i in range(self.N):
-            if np.random.uniform() < lambda_val:
+            if float(np.random.uniform()) < float(lambda_val):
                 # Sample from light-tailed vMFNM component
                 samples[i] = self._sample_vmfnm_component(params)
             else:
@@ -210,258 +268,299 @@ class SafeICE:
 
         return samples
 
-    def _sample_vmfnm_component(self, params: vMFNMParameters) -> np.ndarray:
-        """Sample from vMFNM distribution"""
-        # Sample mixture component
-        k = np.random.choice(params.K, p=params.pi)
+    def _sample_vmfnm_component(self, params: vMFNMParameters) -> NDArrayF:
+        """Sample a single vector from the vMF-Nakagami mixture."""
+        # Choose component
+        k = int(np.random.choice(params.K, p=params.pi))
 
-        # Sample radius from Nakagami distribution
-        r = NakagamiDistribution.sample(params.m[k], params.Omega[k])
+        # Radius from Nakagami
+        r: float = float(NakagamiDistribution.sample(float(params.m[k]), float(params.Omega[k])))
 
-        # Sample direction from von Mises-Fisher distribution
-        a = VonMisesFisherSampler.sample(params.mu[k], params.kappa[k], 1)[0]
-
-        return r * a
-
-    def _sample_heavy_tailed_component(self, params: vMFNMParameters) -> np.ndarray:
-        """Sample from heavy-tailed inverse Nakagami component"""
-        # Sample mixture component
-        k = np.random.choice(params.K, p=params.pi)
-
-        # Heavy-tailed parameters
-        m_IN = max(1, int(np.ceil(np.sqrt(self.d))))  # From paper: ceil(sqrt(d))
-
-        # Match modes between Nakagami and Inverse Nakagami (Equation 34)
-        Omega_IN = self._calculate_matched_omega_inverse_nakagami(
-            params.m[k], params.Omega[k], m_IN
+        # Direction from vMF
+        a: NDArrayF = np.asarray(
+            VonMisesFisherSampler.sample(params.mu[k], float(params.kappa[k]), 1)[0],
+            dtype=np.float64,
         )
 
-        # Sample radius from Inverse Nakagami distribution
-        r = InverseNakagamiDistribution.sample(m_IN, Omega_IN)
+        # Return vector r * a
+        return (r * a).astype(np.float64, copy=False)
 
-        # Sample direction from von Mises-Fisher distribution
-        a = VonMisesFisherSampler.sample(params.mu[k], params.kappa[k], 1)[0]
+    def _sample_heavy_tailed_component(self, params: vMFNMParameters) -> NDArrayF:
+        """Sample a single vector from the heavy-tailed inverse-Nakagami component."""
+        # Choose component
+        k = int(np.random.choice(params.K, p=params.pi))
 
-        return r * a
+        # Heavy-tailed parameters: m_IN = ceil(sqrt(d))
+        m_IN = max(1, int(math.ceil(math.sqrt(self.d))))
 
+        # Match modes between Nakagami and Inverse Nakagami (Equation 34)
+        Omega_IN = float(
+            self._calculate_matched_omega_inverse_nakagami(
+                float(params.m[k]), float(params.Omega[k]), float(m_IN)
+            )
+        )
+
+        # Radius from Inverse Nakagami
+        r: float = float(InverseNakagamiDistribution.sample(int(m_IN), Omega_IN))
+
+        # Direction from vMF
+        a: NDArrayF = np.asarray(
+            VonMisesFisherSampler.sample(params.mu[k], float(params.kappa[k]), 1)[0],
+            dtype=np.float64,
+        )
+
+        return (r * a).astype(np.float64, copy=False)
+
+    # -------------------------------------------------------------------------
+    # Weights, CV, Sigma adaptation
+    # -------------------------------------------------------------------------
     def _calculate_matched_omega_inverse_nakagami(
         self, m_N: float, Omega_N: float, m_IN: float
     ) -> float:
-        """Calculate Omega_IN to match modes (Equation 34 from paper)"""
-        gamma_ratio_squared = (gamma(m_N) / gamma(m_N + 0.5)) ** 2
-
-        Omega_IN = (2 * m_IN) / (2 * m_IN + 1) * gamma_ratio_squared * (m_N / Omega_N)
-
-        return max(Omega_IN, 1e-6)  # Ensure positive
+        """Calculate Omega_IN to match modes (Equation 34)."""
+        # gamma_ratio_squared = [Γ(m_N)/Γ(m_N+1/2)]^2
+        gamma_ratio_squared: float = float((gamma(m_N) / gamma(m_N + 0.5)) ** 2)
+        Omega_IN: float = float((2.0 * m_IN) / (2.0 * m_IN + 1.0)) * gamma_ratio_squared * float(
+            m_N / Omega_N
+        )
+        # Ensure strictly positive
+        return float(max(Omega_IN, 1e-6))
 
     def _calculate_stopping_weights(
         self,
-        samples: np.ndarray,
-        g_values: np.ndarray,
+        samples: NDArrayF,
+        g_values: NDArrayF,
         sigma: float,
         params: vMFNMParameters,
         lambda_val: float,
-    ) -> np.ndarray:
-        """Calculate stopping criterion weights W*_t(u) = I_ΩF(u) / h_t(u)"""
-        # Indicator function: I_ΩF(u) = 1 if g(u) ≤ 0, 0 otherwise
-        indicators = (g_values <= 0).astype(float)
+    ) -> NDArrayF:
+        """Calculate stopping weights W*_t(u) = I_ΩF(u) / h_t(u)."""
+        # Indicator 1{g(u) <= 0}
+        indicators: NDArrayF = (g_values <= 0.0).astype(np.float64, copy=False)
 
-        # Smoothed indicator function: h_t(u) = Φ(-g(u)/σ_t)
-        h_values = stats.norm.cdf(-g_values / sigma)
+        # Smoothed indicator h_t(u) = Φ(-g(u)/σ_t)
+        h_values: NDArrayF = np.asarray(stats.norm.cdf(-g_values / float(sigma)), dtype=np.float64)
 
-        # Stopping weights
-        weights = indicators / np.maximum(h_values, 1e-15)
-
+        # Avoid divide-by-zero via max with tiny
+        weights: NDArrayF = (indicators / np.maximum(h_values, 1e-15)).astype(
+            np.float64, copy=False
+        )
         return weights
 
-    def _coefficient_of_variation(self, weights: np.ndarray) -> float:
-        """Calculate coefficient of variation"""
-        if len(weights) == 0 or np.sum(weights) == 0:
-            return np.inf
+    def _coefficient_of_variation(self, weights: NDArrayF) -> float:
+        """Coefficient of variation of a weight vector."""
+        if weights.size == 0:
+            return float("inf")
 
-        mean_w = np.mean(weights)
-        std_w = np.std(weights)
+        mean_w: float = float(np.mean(weights))
+        if mean_w <= 0.0:
+            return float("inf")
 
-        return std_w / mean_w if mean_w > 0 else np.inf
+        std_w: float = float(np.std(weights))
+        return float(std_w / mean_w)
 
     def _determine_next_sigma(
         self,
-        samples: np.ndarray,
-        g_values: np.ndarray,
+        samples: NDArrayF,
+        g_values: NDArrayF,
         params: vMFNMParameters,
         lambda_val: float,
         sigma_prev: float,
     ) -> float:
-        """Determine next smoothing parameter by solving optimization problem (10)"""
+        """Determine next smoothing parameter σ by solving the 1-D problem (10)."""
 
         def cv_objective(sigma: float) -> float:
-            """Objective function: (δ_W_t(σ) - δ_target)²"""
-            if sigma >= sigma_prev or sigma <= 0:
-                return 1e10
-
-            # Calculate intermediate weights
+            """Objective: (δ_W_t(σ) - δ_target)^2 for 0 < σ < σ_prev."""
+            if sigma >= sigma_prev or sigma <= 0.0:
+                return 1e10  # reject invalid region
             weights = self._calculate_intermediate_weights(
                 samples, g_values, sigma, params, lambda_val
             )
             cv = self._coefficient_of_variation(weights)
+            return float((cv - self.delta_target) ** 2)
 
-            return (cv - self.delta_target) ** 2
-
-        # Minimize over valid range
+        # Minimize over (tiny, sigma_prev)
         try:
             result = minimize_scalar(
-                cv_objective, bounds=(1e-8, sigma_prev * 0.999), method="bounded"
+                cv_objective,
+                bounds=(1e-8, float(sigma_prev) * 0.999),
+                method="bounded",
             )
-            new_sigma = result.x
-        except:
-            # Fallback: simple reduction
-            new_sigma = sigma_prev * 0.8
+            new_sigma = float(result.x)
+        except Exception:
+            # Fallback: conservative reduction
+            new_sigma = float(sigma_prev) * 0.8
 
-        return max(new_sigma, 1e-8)
+        return float(max(new_sigma, 1e-8))
 
     def _calculate_intermediate_weights(
         self,
-        samples: np.ndarray,
-        g_values: np.ndarray,
+        samples: NDArrayF,
+        g_values: NDArrayF,
         sigma: float,
         params: vMFNMParameters,
         lambda_val: float,
-    ) -> np.ndarray:
-        """Calculate intermediate importance weights W_t(u_i, σ)"""
-        # Intermediate distribution weight: p_t(u) / q_safe(u; φ_t-1)
-        h_values = stats.norm.cdf(-g_values / sigma)  # Smoothed indicator
+    ) -> NDArrayF:
+        """Calculate intermediate importance weights W_t(u_i, σ)."""
+        # h(u;σ) = Φ(-g/σ)
+        h_values: NDArrayF = np.asarray(stats.norm.cdf(-g_values / float(sigma)), dtype=np.float64)
 
-        # Prior density
-        prior_densities = self._evaluate_prior_density(samples)
+        # Prior density p(u)
+        prior_densities: NDArrayF = self._evaluate_prior_density(samples)
 
-        # Safe mixture density
-        safe_densities = self._evaluate_safe_mixture_density(
+        # Safe mixture density q_safe(u; φ)
+        safe_densities: NDArrayF = self._evaluate_safe_mixture_density(
             samples, params, lambda_val
         )
 
-        # Intermediate weights
-        weights = h_values * prior_densities / np.maximum(safe_densities, 1e-15)
-
+        # W_t = h * p / q_safe
+        weights: NDArrayF = (h_values * prior_densities / np.maximum(safe_densities, 1e-15)).astype(
+            np.float64, copy=False
+        )
         return weights
 
     def _update_parameters_penalized_em(
         self,
-        samples: np.ndarray,
-        g_values: np.ndarray,
+        samples: NDArrayF,
+        g_values: NDArrayF,
         params: vMFNMParameters,
         sigma: float,
         lambda_val: float,
     ) -> vMFNMParameters:
-        """Update vMFNM parameters using penalized EM algorithm"""
-
-        # Calculate importance weights for EM
-        weights = self._calculate_intermediate_weights(
+        """Update vMFNM parameters using penalized EM with importance weights."""
+        weights: NDArrayF = self._calculate_intermediate_weights(
             samples, g_values, sigma, params, lambda_val
         )
-
-        # Run penalized EM optimization
-        updated_params, final_K = self.em_optimizer.fit(samples, weights, params)
-
+        # Fit returns (updated_params, final_K). We only need parameters here.
+        updated_params, _final_K = self.em_optimizer.fit(samples, weights, params)
         return updated_params
 
+    # -------------------------------------------------------------------------
+    # Densities and final estimate
+    # -------------------------------------------------------------------------
     def _estimate_failure_probability(
         self,
-        samples: np.ndarray,
-        g_values: np.ndarray,
+        samples: NDArrayF,
+        g_values: NDArrayF,
         params: vMFNMParameters,
         lambda_val: float,
     ) -> float:
-        """Final failure probability estimation using equation (36)"""
-        # Indicator function
-        indicators = (g_values <= 0).astype(float)
+        """Final failure probability estimate via equation (36)."""
+        # Indicator 1{g <= 0}
+        indicators: NDArrayF = (g_values <= 0.0).astype(np.float64, copy=False)
 
-        # Prior densities
-        prior_densities = self._evaluate_prior_density(samples)
-
-        # Safe mixture densities
-        safe_densities = self._evaluate_safe_mixture_density(
+        # Densities
+        prior_densities: NDArrayF = self._evaluate_prior_density(samples)
+        safe_densities: NDArrayF = self._evaluate_safe_mixture_density(
             samples, params, lambda_val
         )
 
         # Importance weights
-        importance_weights = prior_densities / np.maximum(safe_densities, 1e-15)
+        importance_weights: NDArrayF = (prior_densities / np.maximum(safe_densities, 1e-15)).astype(
+            np.float64, copy=False
+        )
 
-        # Failure probability estimate
-        pf_estimate = np.mean(indicators * importance_weights)
-
+        # Monte Carlo estimate
+        pf_estimate: float = float(np.mean(indicators * importance_weights))
         return pf_estimate
 
-    def _evaluate_prior_density(self, samples: np.ndarray) -> np.ndarray:
-        """Evaluate standard Gaussian prior density p(u)"""
-        return stats.multivariate_normal.pdf(
+    def _evaluate_prior_density(self, samples: NDArrayF) -> NDArrayF:
+        """Evaluate standard Gaussian prior density p(u) = N(0, I_d)."""
+        vals = stats.multivariate_normal.pdf(
             samples, mean=np.zeros(self.d), cov=np.eye(self.d)
         )
+        return np.asarray(vals, dtype=np.float64)
 
     def _evaluate_safe_mixture_density(
-        self, samples: np.ndarray, params: vMFNMParameters, lambda_val: float
-    ) -> np.ndarray:
-        """Evaluate safe mixture density q_safe(u; φ)"""
-        # Light-tailed component density
+        self, samples: NDArrayF, params: vMFNMParameters, lambda_val: float
+    ) -> NDArrayF:
+        """Evaluate safe mixture density q_safe(u; φ)."""
+        # Light-tailed component (vMF-Nakagami mixture)
         vmfnm_dist = vMFNMDistribution(params)
-        light_densities = vmfnm_dist.pdf(samples)
+        light_densities: NDArrayF = np.asarray(vmfnm_dist.pdf(samples), dtype=np.float64)
 
-        # Heavy-tailed component density
-        heavy_densities = self._evaluate_heavy_tailed_density(samples, params)
+        # Heavy-tailed component (inverse Nakagami radial + vMF angular)
+        heavy_densities: NDArrayF = self._evaluate_heavy_tailed_density(samples, params)
 
-        # Safe mixture
-        safe_densities = (
-            lambda_val * light_densities + (1 - lambda_val) * heavy_densities
-        )
-
+        # Combine
+        safe_densities: NDArrayF = (
+            float(lambda_val) * light_densities + (1.0 - float(lambda_val)) * heavy_densities
+        ).astype(np.float64, copy=False)
         return safe_densities
 
     def _evaluate_heavy_tailed_density(
-        self, samples: np.ndarray, params: vMFNMParameters
-    ) -> np.ndarray:
-        """Evaluate heavy-tailed component density"""
-        n_samples = len(samples)
-        densities = np.zeros(n_samples)
+        self, samples: NDArrayF, params: vMFNMParameters
+    ) -> NDArrayF:
+        """Evaluate density of the heavy-tailed component for each sample."""
+        n_samples = int(samples.shape[0])
+        densities: NDArrayF = np.zeros(n_samples, dtype=np.float64)
 
         for i, sample in enumerate(samples):
-            r = np.linalg.norm(sample)
+            # Polar decomposition u = r * a
+            r: float = float(np.linalg.norm(sample))
             if r > 1e-12:
-                a = sample / r
+                a: NDArrayF = (sample / r).astype(np.float64, copy=False)
             else:
-                a = np.zeros(self.d)
+                # Degenerate direction (rare): set a = e1, r tiny
+                a = np.zeros(self.d, dtype=np.float64)
                 a[0] = 1.0
                 r = 1e-12
 
-            # Mixture over components
-            mixture_val = 0.0
+            # Mixture across components
+            mixture_val: float = 0.0
             for k in range(params.K):
-                # Heavy-tailed radial component (Inverse Nakagami)
-                m_IN = max(1, int(np.ceil(np.sqrt(self.d))))
-                Omega_IN = self._calculate_matched_omega_inverse_nakagami(
-                    params.m[k], params.Omega[k], m_IN
+                # Radial: Inverse Nakagami with mode-matching parameters
+                m_IN = max(1, int(math.ceil(math.sqrt(self.d))))
+                Omega_IN = float(
+                    self._calculate_matched_omega_inverse_nakagami(
+                        float(params.m[k]), float(params.Omega[k]), float(m_IN)
+                    )
                 )
 
-                radial_density = InverseNakagamiDistribution.pdf(r, m_IN, Omega_IN)
+                # Many SciPy/NumPy pdfs are typed for arrays; pass 1-D array then extract
+                r_arr: NDArrayF = np.asarray([r], dtype=np.float64)
+                radial_density_arr: NDArrayF = np.asarray(
+                    InverseNakagamiDistribution.pdf(r_arr, int(m_IN), Omega_IN),
+                    dtype=np.float64,
+                )
+                radial_density: float = float(radial_density_arr[0])
 
-                # Angular component (von Mises-Fisher)
-                angular_density = self._vmf_pdf_single(a, params.mu[k], params.kappa[k])
+                # Angular: vMF density at direction a
+                angular_density: float = float(
+                    self._vmf_pdf_single(
+                        a,
+                        params.mu[k],
+                        float(params.kappa[k]),
+                    )
+                )
 
-                mixture_val += params.pi[k] * radial_density * angular_density
+                mixture_val += float(params.pi[k]) * radial_density * angular_density
 
-            densities[i] = mixture_val
+            densities[i] = float(mixture_val)
 
         return densities
 
-    def _vmf_pdf_single(self, x: np.ndarray, mu: np.ndarray, kappa: float) -> float:
-        """von Mises-Fisher PDF for single point"""
+    # -------------------------------------------------------------------------
+    # vMF single-point PDF
+    # -------------------------------------------------------------------------
+    def _vmf_pdf_single(self, x: NDArrayF, mu: NDArrayF, kappa: float) -> float:
+        """von Mises–Fisher PDF for a single point x on S^{d-1}."""
         from scipy.special import iv
 
-        d = len(x)
+        d = int(x.shape[0])
 
-        if kappa == 0:
-            # Uniform on sphere
-            return 1.0 / (2 * np.pi ** (d / 2) / gamma(d / 2))
+        if float(kappa) == 0.0:
+            # Uniform on the sphere: 1 / surface_area(S^{d-1})
+            # surface_area(S^{d-1}) = 2 * π^{d/2} / Γ(d/2)
+            surface_area: float = float(2.0 * (math.pi ** (d / 2.0)) / float(gamma(d / 2.0)))
+            return float(1.0 / surface_area)
 
-        # Normalization constant
-        C_d = kappa ** (d / 2 - 1) / ((2 * np.pi) ** (d / 2) * iv(d / 2 - 1, kappa))
+        # Normalization constant C_d(κ)
+        # C_d(κ) = κ^{d/2 - 1} / [(2π)^{d/2} I_{d/2-1}(κ)]
+        nu: float = float(d / 2.0 - 1.0)
+        denom: float = float(((2.0 * math.pi) ** (d / 2.0)) * float(iv(nu, kappa)))
+        C_d: float = float((kappa ** nu) / denom)
 
-        return C_d * np.exp(kappa * np.dot(x, mu))
+        # exp(κ μ^T x)
+        dot_val: float = float(np.dot(x, mu))
+        return float(C_d * math.exp(float(kappa) * dot_val))
