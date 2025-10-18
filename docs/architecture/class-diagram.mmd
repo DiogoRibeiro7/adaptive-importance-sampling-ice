@@ -87,6 +87,17 @@ classDiagram
     +limit_state_function()
   }
 
+  class Paths {
+  }
+
+  class Options {
+  }
+
+  class DepRef {
+    +emit_from_table()
+    +emit_from_array()
+  }
+
   class TestVonMisesFisherSampler {
     +test_sample_shape()
     +test_samples_are_unit_vectors()
