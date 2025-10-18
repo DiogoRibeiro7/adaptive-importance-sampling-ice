@@ -1,13 +1,13 @@
-name: 'Dependency Review'
-on: 
+name: Dependency Review
+
+on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-  schedule:
-    # Weekly diagram regeneration on Sunday at midnight
-    - cron: '0 0 * * 0'
+  merge_group:
   workflow_dispatch:
+
 permissions:
   contents: read
 
@@ -15,7 +15,16 @@ jobs:
   dependency-review:
     runs-on: ubuntu-latest
     steps:
-      - name: 'Checkout Repository'
+      - name: Checkout Repository
         uses: actions/checkout@v5
-      - name: 'Dependency Review'
+
+      - name: Dependency Review (PRs/Merge Group)
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         uses: actions/dependency-review-action@v4
+
+      - name: Dependency Review (Push)
+        if: github.event_name == 'push' && github.event.before != ''
+        uses: actions/dependency-review-action@v4
+        with:
+          base-ref: ${{ github.event.before }}
+          head-ref: ${{ github.sha }}

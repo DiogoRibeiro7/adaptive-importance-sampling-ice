@@ -23,7 +23,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -81,7 +81,7 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha }}
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -139,13 +139,13 @@ jobs:
           node-version: '20'
 
       - name: Download PR benchmarks
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v5
         with:
           name: pr-benchmarks
           path: ./pr-benchmarks
 
       - name: Download base benchmarks
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v5
         with:
           name: base-benchmarks
           path: ./base-benchmarks
