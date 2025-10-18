@@ -1,11 +1,20 @@
-"""Heat transfer problem with Karhunen-Loève expansion."""
+# safe_ice/problems/heat_transfer.py
+"""Heat transfer problem with Karhunen–Loève expansion."""
+
+from __future__ import annotations
+
+from typing import Callable
 
 import numpy as np
-from typing import Callable
+import numpy.typing as npt
+
+# Typed aliases
+NDArrayF = npt.NDArray[np.float64]
+NDArrayB = npt.NDArray[np.bool_]
 
 
 class HeatTransferProblem:
-    """Complete heat transfer problem implementation from Section 4.5"""
+    """Complete heat transfer problem implementation from Section 4.5."""
 
     def __init__(
         self,
@@ -15,137 +24,156 @@ class HeatTransferProblem:
         heat_source: float = 2000.0,
     ) -> None:
         """
-        Initialize heat transfer problem
+        Initialize heat transfer problem.
 
         Args:
-            grid_size: discretization grid size
-            correlation_length: correlation length for random field
-            n_terms: number of KL expansion terms
-            heat_source: heat source magnitude
+            grid_size: Discretization grid size.
+            correlation_length: Correlation length for random field.
+            n_terms: Number of KL expansion terms.
+            heat_source: Heat source magnitude.
         """
         self.grid_size = grid_size
         self.l = correlation_length
         self.n_terms = n_terms
         self.Q = heat_source
 
-        # Domain parameters
-        self.domain = (-0.5, 0.5, -0.5, 0.5)  # (x_min, x_max, y_min, y_max)
+        # Domain parameters: (x_min, x_max, y_min, y_max)
+        self.domain = (-0.5, 0.5, -0.5, 0.5)
 
-        # Generate discretization
         self._setup_discretization()
-
-        # Precompute KL expansion basis
         self._setup_kl_expansion()
 
     def _setup_discretization(self) -> None:
-        """Setup finite element discretization"""
-        x = np.linspace(self.domain[0], self.domain[1], self.grid_size)
-        y = np.linspace(self.domain[2], self.domain[3], self.grid_size)
-        self.X, self.Y = np.meshgrid(x, y)
+        """Setup finite-difference discretization (typed to avoid Any propagation)."""
+        x: NDArrayF = np.linspace(
+            self.domain[0], self.domain[1], self.grid_size, dtype=np.float64
+        )
+        y: NDArrayF = np.linspace(
+            self.domain[2], self.domain[3], self.grid_size, dtype=np.float64
+        )
+        X, Y = np.meshgrid(x, y)
+        self.X: NDArrayF = np.asarray(X, dtype=np.float64)
+        self.Y: NDArrayF = np.asarray(Y, dtype=np.float64)
 
-        # Grid points
-        self.grid_points = np.column_stack([self.X.ravel(), self.Y.ravel()])
-        self.n_points = len(self.grid_points)
+        # Grid points (N x 2)
+        self.grid_points: NDArrayF = np.asarray(
+            np.column_stack([self.X.ravel(), self.Y.ravel()]), dtype=np.float64
+        )
+        self.n_points = int(self.grid_points.shape[0])
 
     def _setup_kl_expansion(self) -> None:
-        """Setup Karhunen-Loève expansion for lognormal random field"""
-        # Exponential covariance function: k(x,x') = exp(-||x-x'||/l)
-        distances = np.sqrt(
+        """Setup Karhunen–Loève expansion for a lognormal random field."""
+        # Exponential covariance: k(x,x') = exp(-||x - x'|| / l)
+        distances: NDArrayF = np.sqrt(
             np.sum(
                 (self.grid_points[:, None, :] - self.grid_points[None, :, :]) ** 2,
                 axis=2,
             )
         )
+        C: NDArrayF = np.exp(-distances / np.float64(self.l))
 
-        # Covariance matrix
-        C = np.exp(-distances / self.l)
-
-        # Eigendecomposition
+        # Eigendecomposition (float64 arrays)
         eigenvals, eigenvecs = np.linalg.eigh(C)
 
-        # Sort in descending order
+        # Sort by descending eigenvalue and keep first n_terms
         idx = np.argsort(eigenvals)[::-1]
-        self.eigenvals = eigenvals[idx][: self.n_terms]
-        self.eigenvecs = eigenvecs[:, idx][:, : self.n_terms]
-
-        # Normalize eigenvectors
-        for i in range(self.n_terms):
-            self.eigenvecs[:, i] /= np.sqrt(np.sum(self.eigenvecs[:, i] ** 2))
-
-    def generate_permeability_field(self, xi: np.ndarray) -> np.ndarray:
-        """Generate lognormal permeability field from KL expansion"""
-        # Mean and std parameters for lognormal field
-        mu_kappa = 1.0  # mean permeability
-        sigma_kappa = 0.3  # std permeability
-
-        # Lognormal parameters
-        a_kappa = np.log(mu_kappa**2 / np.sqrt(mu_kappa**2 + sigma_kappa**2))
-        b_kappa = np.sqrt(np.log(1 + sigma_kappa**2 / mu_kappa**2))
-
-        # KL expansion
-        f_field = np.sum(
-            np.sqrt(self.eigenvals) * self.eigenvecs * xi[: self.n_terms], axis=1
+        self.eigenvals = eigenvals[idx][: self.n_terms].astype(np.float64, copy=False)
+        self.eigenvecs = eigenvecs[:, idx][:, : self.n_terms].astype(
+            np.float64, copy=False
         )
 
+        # --- Vectorized, type-stable column normalization ---
+        # Norms as a (1, n_terms) array (keepdims=True prevents scalar return)
+        norms: NDArrayF = np.linalg.norm(
+            self.eigenvecs, axis=0, keepdims=True
+        ).astype(np.float64, copy=False)
+
+        # Avoid division by zero in a vectorized, typed-safe way
+        eps = np.finfo(np.float64).tiny  # strictly positive float64
+        norms = np.maximum(norms, eps)
+
+        # Broadcasted normalization: (n_points, n_terms) / (1, n_terms)
+        self.eigenvecs = self.eigenvecs / norms
+
+    def generate_permeability_field(self, xi: npt.ArrayLike) -> NDArrayF:
+        """Generate lognormal permeability field from the KL expansion."""
+        # Mean and std for lognormal field
+        mu_kappa = 1.0
+        sigma_kappa = 0.3
+
+        # Lognormal parameters
+        a_kappa = np.log((mu_kappa**2) / np.sqrt(mu_kappa**2 + sigma_kappa**2))
+        b_kappa = np.sqrt(np.log(1.0 + (sigma_kappa**2) / (mu_kappa**2)))
+
+        # KL expansion coefficients
+        xi_vec: NDArrayF = np.asarray(xi, dtype=np.float64)[: self.n_terms]
+        # KL expansion coefficients: turn the triple product into a matvec
+        # shapes: eigenvecs (n_points, n_terms) @ coeffs (n_terms,) -> (n_points,)
+        coeffs: NDArrayF = np.multiply(
+            np.sqrt(self.eigenvals, dtype=np.float64),
+            np.asarray(xi, dtype=np.float64)[: self.n_terms],
+            dtype=np.float64,
+        )
+        f_field: NDArrayF = np.asarray(self.eigenvecs @ coeffs, dtype=np.float64)
+
         # Lognormal field
-        kappa_field = np.exp(a_kappa + b_kappa * f_field)
+        kappa_field: NDArrayF = np.exp(a_kappa + b_kappa * f_field, dtype=np.float64)
 
-        return kappa_field.reshape(self.grid_size, self.grid_size)
+        return np.asarray(
+            kappa_field.reshape(self.grid_size, self.grid_size), dtype=np.float64
+        )
 
-    def solve_heat_equation(self, kappa_field: np.ndarray) -> np.ndarray:
-        """Solve heat equation using finite differences"""
-        # Simple finite difference solver
-        h = 1.0 / (self.grid_size - 1)  # grid spacing
+    def solve_heat_equation(self, kappa_field: npt.ArrayLike) -> NDArrayF:
+        """Solve heat equation using a simple finite-difference iterative scheme."""
+        h = 1.0 / float(self.grid_size - 1)  # grid spacing
 
-        # Initialize temperature field
-        T = np.zeros((self.grid_size, self.grid_size))
+        # Temperature and conductivity fields
+        T: NDArrayF = np.zeros((self.grid_size, self.grid_size), dtype=np.float64)
+        kappa: NDArrayF = np.asarray(kappa_field, dtype=np.float64)
 
         # Heat source region A = (0.2, 0.3) × (0.2, 0.3)
         x_indices = np.where((self.X >= 0.2) & (self.X <= 0.3))
         y_indices = np.where((self.Y >= 0.2) & (self.Y <= 0.3))
-        source_mask = np.zeros_like(T, dtype=bool)
-        source_mask[x_indices[0], x_indices[1]] = True
+        source_mask: NDArrayB = np.zeros_like(T, dtype=bool)
+        source_mask[x_indices[0], x_indices[1]] = True  # rectangular mask
 
-        # Iterative solver (simplified)
-        for iteration in range(1000):
-            T_old = T.copy()
+        # Iterative Jacobi-like update
+        for _ in range(1000):
+            T_old: NDArrayF = T.copy()
 
-            # Interior points
+            # Interior updates
             for i in range(1, self.grid_size - 1):
                 for j in range(1, self.grid_size - 1):
-                    # Finite difference approximation
                     laplacian = (
-                        kappa_field[i + 1, j] * (T_old[i + 1, j] - T_old[i, j])
-                        - kappa_field[i - 1, j] * (T_old[i, j] - T_old[i - 1, j])
+                        kappa[i + 1, j] * (T_old[i + 1, j] - T_old[i, j])
+                        - kappa[i - 1, j] * (T_old[i, j] - T_old[i - 1, j])
                     ) / h**2 + (
-                        kappa_field[i, j + 1] * (T_old[i, j + 1] - T_old[i, j])
-                        - kappa_field[i, j - 1] * (T_old[i, j] - T_old[i, j - 1])
+                        kappa[i, j + 1] * (T_old[i, j + 1] - T_old[i, j])
+                        - kappa[i, j - 1] * (T_old[i, j] - T_old[i, j - 1])
                     ) / h**2
 
-                    # Add heat source
                     source_term = self.Q if source_mask[i, j] else 0.0
-
                     T[i, j] = T_old[i, j] + 0.01 * (laplacian + source_term)
 
             # Boundary conditions
-            T[0, :] = 0  # Bottom: Dirichlet
+            T[0, :] = 0.0  # Bottom: Dirichlet
             T[-1, :] = T[-2, :]  # Top: Neumann (zero gradient)
-            T[:, 0] = 0  # Left: Dirichlet
-            T[:, -1] = 0  # Right: Dirichlet
+            T[:, 0] = 0.0  # Left: Dirichlet
+            T[:, -1] = 0.0  # Right: Dirichlet
 
-            # Check convergence
-            if np.max(np.abs(T - T_old)) < 1e-6:
+            # Convergence check
+            if float(np.max(np.abs(T - T_old))) < 1e-6:
                 break
 
         return T
 
     def create_limit_state_function(
         self, threshold: float = 10.0
-    ) -> Callable[[np.ndarray], float]:
-        """Create limit state function for heat transfer problem"""
+    ) -> Callable[[npt.ArrayLike], float]:
+        """Return g(u) = threshold − average temperature on region B."""
 
-        def limit_state_function(u: np.ndarray) -> float:
-            # Generate permeability field
+        def limit_state_function(u: npt.ArrayLike) -> float:
+            # Generate permeability field from KL coefficients
             kappa_field = self.generate_permeability_field(u)
 
             # Solve heat equation
@@ -156,9 +184,9 @@ class HeatTransferProblem:
             y_mask = (self.Y >= -0.3) & (self.Y <= 0.2)
             eval_mask = x_mask & y_mask
 
-            # Average temperature in evaluation region
-            T_avg = np.mean(T_field[eval_mask])
+            # Average temperature in region B
+            T_avg = float(np.mean(T_field[eval_mask], dtype=np.float64))
 
-            return threshold - T_avg
+            return float(threshold - T_avg)
 
         return limit_state_function

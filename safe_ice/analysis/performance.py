@@ -1,7 +1,12 @@
 """Performance evaluation utilities for Safe-ICE."""
+from __future__ import annotations
 
+from typing import Any, Tuple, cast, Callable, Optional, Dict, Tuple, Any
 import numpy as np
-from typing import Callable, Optional, Dict, Tuple, Any
+import numpy.typing as npt
+
+NDArrayF = npt.NDArray[np.float64]
+NDArrayI = npt.NDArray[np.int64]
 
 from ..core.safe_ice import SafeICE
 
