@@ -511,7 +511,7 @@
 <title>iniconfig</title>
 <ellipse fill="none" stroke="black" cx="4924.84" cy="-341.09" rx="54.39" ry="26.74"/>
 <text text-anchor="middle" x="4924.84" y="-344.89" font-family="Times,serif" font-size="14.00">iniconfig</text>
-<text text-anchor="middle" x="4924.84" y="-329.89" font-family="Times,serif" font-size="14.00">2.2.0</text>
+<text text-anchor="middle" x="4924.84" y="-329.89" font-family="Times,serif" font-size="14.00">2.3.0</text>
 </g>
 <!-- installer -->
 <g id="node43" class="node">
