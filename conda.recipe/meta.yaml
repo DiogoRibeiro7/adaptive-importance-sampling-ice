@@ -47,7 +47,7 @@ test:
     - pytest tests/ -v
 
 about:
-  home: https://github.com/yourusername/adaptive-importance-sampling-ice
+  home: https://github.com/diogoribeiro7/adaptive-importance-sampling-ice
   summary: Safe Cross-Entropy-Based Importance Sampling for Rare Event Simulations
   description: |
     Safe-ICE is a cutting-edge Python implementation of the Safe Cross-Entropy
@@ -69,9 +69,9 @@ about:
   license_family: MIT
   license_file: LICENSE
   doc_url: https://safe-ice.readthedocs.io/
-  dev_url: https://github.com/yourusername/adaptive-importance-sampling-ice
+  dev_url: https://github.com/diogoribeiro7/adaptive-importance-sampling-ice
 
 extra:
   recipe-maintainers:
-    - yourusername
+    - diogoribeiro7
   feedstock-name: safe-ice-feedstock
