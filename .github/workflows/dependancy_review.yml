@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Dependency Review (PRs/Merge Group)
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
