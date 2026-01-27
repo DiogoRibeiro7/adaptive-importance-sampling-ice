@@ -1,4 +1,12 @@
 classDiagram
+  class InteractiveVisualizer {
+    +plot_convergence_interactive()
+    +plot_sample_evolution_3d()
+    +plot_mixture_evolution()
+    +plot_realtime_monitor()
+    +create_parameter_sensitivity_plot()
+  }
+
   class PerformanceEvaluator {
     +run_monte_carlo_reference()
     +compare_methods()
@@ -7,6 +15,13 @@ classDiagram
   class AdvancedAnalysis {
     +analyze_component_evolution()
     +analyze_sample_distribution()
+  }
+
+  class AdaptiveSafeICE {
+    +auto_tune
+    +adaptive_schedule
+    +objective()
+    +run()
   }
 
   class vMFNMParameters {
@@ -25,6 +40,15 @@ classDiagram
     +delta_star
     +run()
     +cv_objective()
+  }
+
+  class OptimizedSafeICE {
+    +g
+    +d
+    +K0
+    +delta_target
+    +delta_star
+    +run()
   }
 
   class vMFNMDistribution {
@@ -54,6 +78,27 @@ classDiagram
     +sample()
   }
 
+  class NakagamiDistribution {
+    +pdf()
+    +pdf()
+    +pdf()
+    +log_pdf()
+    +cdf()
+    +cdf()
+    +cdf()
+    +sample()
+  }
+
+  class InverseNakagamiDistribution {
+    +pdf()
+    +pdf()
+    +pdf()
+    +cdf()
+    +cdf()
+    +cdf()
+    +sample()
+  }
+
   class VonMisesFisherSampler {
     +sample()
   }
@@ -62,6 +107,56 @@ classDiagram
     +max_em_iterations
     +em_tolerance
     +fit()
+  }
+
+  class TimeVariantProblem {
+    +g_base
+    +time_points
+    +n_time
+    +correlation_func
+    +correlation_matrix
+    +get_series_system_limit_state()
+    +g_series()
+    +get_parallel_system_limit_state()
+    +g_parallel()
+    +get_cumulative_damage_limit_state()
+    +g_damage()
+  }
+
+  class SystemReliabilityProblem {
+    +component_funcs
+    +n_components
+    +correlation_matrix
+    +correlation_matrix
+    +get_series_system()
+    +g_series()
+    +get_parallel_system()
+    +g_parallel()
+    +get_k_out_of_n_system()
+    +g_k_out_of_n()
+    +get_correlated_system()
+    +g_correlated()
+  }
+
+  class StochasticProcessProblem {
+    +mean_func
+    +cov_func
+    +mesh_points
+    +n_points
+    +cov_matrix
+    +generate_random_field()
+    +get_excursion_limit_state()
+    +g_excursion()
+  }
+
+  class NetworkReliabilityProblem {
+    +adj_matrix
+    +n_nodes
+    +edges
+    +n_edges
+    +edge_funcs
+    +get_connectivity_limit_state()
+    +g_connectivity()
   }
 
   class BenchmarkProblems {
@@ -87,6 +182,37 @@ classDiagram
     +limit_state_function()
   }
 
+  class PerformanceCache {
+    +max_size
+    +clear()
+    +get_omega_in()
+    +get_vmf_normalization()
+  }
+
+  class VectorizedOperations {
+    +compute_radii_batch()
+    +normalize_directions_batch()
+    +evaluate_vmf_density_batch()
+    +evaluate_mixture_density_batch()
+  }
+
+  class MemoryEfficientSampling {
+    +generate_samples_in_batches()
+    +evaluate_function_in_batches()
+  }
+
+  class ParallelProcessor {
+    +parallel_map()
+  }
+
+  class OptimizationUtils {
+    +preallocate_arrays()
+    +check_memory_usage()
+    +cached_chi2_pdf()
+    +cached_bessel_iv()
+    +wrapper()
+  }
+
   class Paths {
   }
 
@@ -96,6 +222,46 @@ classDiagram
   class DepRef {
     +emit_from_table()
     +emit_from_array()
+  }
+
+  class TestBenchmarkProblemsStructure {
+    +problems
+    +setup_method()
+    +test_four_mode_series_system_properties()
+    +test_three_mode_problem_properties()
+    +test_two_mode_opposite_directions()
+    +test_nonlinear_oscillator()
+    +test_nakagami_ratio_problem()
+  }
+
+  class TestBenchmarkProblemsBehavior {
+    +problems
+    +setup_method()
+    +test_four_mode_series_symmetry()
+    +test_failure_regions()
+    +test_gradient_smoothness()
+    +test_monotonicity_properties()
+  }
+
+  class TestHeatTransferProblem {
+    +test_initialization_default()
+    +test_initialization_custom()
+    +test_kl_expansion_setup()
+    +test_limit_state_function()
+    +test_temperature_computation()
+    +test_different_truncations()
+    +test_physical_consistency()
+  }
+
+  class TestBenchmarkComparison {
+    +test_relative_difficulty()
+    +test_dimension_scaling()
+  }
+
+  class TestBenchmarkRobustness {
+    +test_handle_edge_inputs()
+    +test_vectorization_consistency()
+    +test_numerical_stability()
   }
 
   class TestVonMisesFisherSampler {
@@ -135,3 +301,93 @@ classDiagram
     +test_vmfnm_sampling_consistency()
   }
 
+  class TestEndToEndWorkflow {
+    +test_complete_workflow_with_benchmarks()
+    +test_workflow_with_custom_limit_state()
+    +custom_limit_state()
+    +test_multiple_runs_consistency()
+  }
+
+  class TestKnownFailureProbabilities {
+    +test_simple_sphere_problem()
+    +sphere_limit_state()
+    +test_linear_limit_state()
+    +linear_limit_state()
+  }
+
+  class TestPerformanceRegression {
+    +test_execution_time_reasonable()
+    +test_memory_usage_scales_linearly()
+    +simple_limit_state()
+  }
+
+  class TestHighDimensionalProblems {
+    +test_dimension_10()
+    +high_dim_limit_state()
+    +test_dimension_50()
+    +very_high_dim_limit_state()
+  }
+
+  class TestWithPerformanceEvaluator {
+    +test_performance_comparison()
+    +test_compute_metrics()
+  }
+
+  class TestEdgeCases {
+    +test_single_sample_per_iteration()
+    +simple_limit_state()
+    +test_single_iteration()
+    +test_very_rare_event()
+    +rare_event_limit_state()
+    +test_certain_failure()
+    +certain_failure_limit_state()
+  }
+
+  class TestSafeICEInitialization {
+    +test_basic_initialization()
+    +g()
+    +test_initialization_with_custom_parameters()
+    +g()
+  }
+
+  class TestSafeICEExecution {
+    +test_single_iteration()
+    +test_multiple_iterations()
+    +test_deterministic_limit_state()
+    +g()
+    +test_high_dimensional_problem()
+    +g()
+    +test_dimension_consistency()
+    +g()
+  }
+
+  class TestSafeICEWithInitialParams {
+    +test_with_initial_params()
+    +g()
+  }
+
+  class TestBenchmarkProblems {
+    +test_four_mode_series_system()
+    +test_three_mode_problem()
+    +test_two_mode_opposite_directions()
+  }
+
+  class TestErrorHandling {
+    +test_limit_state_returns_nan()
+    +g()
+    +test_limit_state_returns_inf()
+    +g()
+    +test_all_samples_fail()
+    +g()
+    +test_no_samples_fail()
+    +g()
+  }
+
+  class TestConvergence {
+    +test_cv_convergence()
+    +g()
+    +test_early_stopping()
+    +g()
+  }
+
+  OptimizedSafeICE <|-- AdaptiveSafeICE

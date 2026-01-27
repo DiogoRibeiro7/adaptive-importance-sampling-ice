@@ -1,11 +1,11 @@
 # Architecture Documentation
 
-*Auto-generated on 2026-01-25*
+*Auto-generated on 2026-01-27*
 
 ## Project Overview
 
-- **Python Files:** 21
-- **Test Files:** 1
+- **Python Files:** 40
+- **Test Files:** 4
 - **Frameworks:** None detected
 
 ## Architecture Diagrams
@@ -26,12 +26,12 @@
 
 Main directories:
 - `benchmarks/`
+- `conda.recipe/`
 - `docs/`
 - `architecture/`
+- `source/`
+- `api/`
+- `examples/`
+- `examples/`
 - `safe_ice/`
 - `analysis/`
-- `core/`
-- `distributions/`
-- `optimization/`
-- `problems/`
-- `utils/`
