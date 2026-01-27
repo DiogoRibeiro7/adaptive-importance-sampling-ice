@@ -2,6 +2,6 @@
 """Analysis and visualization tools for Safe-ICE."""
 
 from .performance import PerformanceEvaluator
-from .visualization import AdvancedAnalysis
+from .vizualization import AdvancedAnalysis
 
 __all__ = ["PerformanceEvaluator", "AdvancedAnalysis"]

@@ -183,3 +183,8 @@ htmlcov/
 
 # Bandit reports
 bandit-report.json
+
+# Contract tests
+contract_tests/
+*_contract_test.py
+*.contract

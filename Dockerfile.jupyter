@@ -1,0 +1,44 @@
+# Dockerfile for Jupyter Lab with Safe-ICE
+
+FROM jupyter/scipy-notebook:latest
+
+USER root
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Switch back to jovyan user
+USER ${NB_UID}
+
+# Copy and install Safe-ICE
+WORKDIR /tmp/safe-ice
+COPY --chown=${NB_UID}:${NB_GID} . .
+
+# Install Safe-ICE with all extras
+RUN pip install --no-cache-dir -e .[all] && \
+    pip install --no-cache-dir \
+    jupyterlab-execute-time \
+    jupyterlab-git \
+    ipywidgets \
+    plotly
+
+# Install Jupyter extensions
+RUN jupyter labextension install @jupyter-widgets/jupyterlab-manager --no-build && \
+    jupyter labextension install jupyterlab-plotly --no-build && \
+    jupyter lab build --dev-build=False --minimize=False
+
+# Set working directory
+WORKDIR /home/jovyan/work
+
+# Copy example notebooks
+COPY --chown=${NB_UID}:${NB_GID} examples /home/jovyan/work/examples
+COPY --chown=${NB_UID}:${NB_GID} notebooks /home/jovyan/work/notebooks
+
+# Create sample notebook
+RUN echo 'import safe_ice\nprint(f"Safe-ICE version: {safe_ice.__version__}")' | \
+    jupyter nbconvert --to notebook --stdin --output=/home/jovyan/work/welcome.ipynb
+
+CMD ["start.sh", "jupyter", "lab", "--LabApp.default_url=/lab/tree/welcome.ipynb"]

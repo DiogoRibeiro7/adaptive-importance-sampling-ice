@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  safe-ice:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: safe-ice:latest
+    container_name: safe-ice-dev
+    volumes:
+      - ./examples:/workspace/examples
+      - ./data:/workspace/data
+      - ./notebooks:/workspace/notebooks
+    environment:
+      - PYTHONUNBUFFERED=1
+      - JUPYTER_ENABLE_LAB=yes
+    working_dir: /workspace
+    command: python
+
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile.jupyter
+    image: safe-ice-jupyter:latest
+    container_name: safe-ice-jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./examples:/workspace/examples
+      - ./notebooks:/workspace/notebooks
+      - ./data:/workspace/data
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    command: >
+      jupyter lab
+      --ip=0.0.0.0
+      --port=8888
+      --no-browser
+      --allow-root
+      --NotebookApp.token=''
+      --NotebookApp.password=''
+
+  docs:
+    build:
+      context: .
+      dockerfile: Dockerfile.docs
+    image: safe-ice-docs:latest
+    container_name: safe-ice-docs
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./docs:/workspace/docs
+    working_dir: /workspace/docs
+    command: >
+      sh -c "
+      sphinx-build -b html source build/html &&
+      python -m http.server 8000 --directory build/html
+      "
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: safe-ice:latest
+    container_name: safe-ice-test
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    command: pytest tests/ -v --cov=safe_ice --cov-report=html
+
+volumes:
+  notebooks:
+  data:

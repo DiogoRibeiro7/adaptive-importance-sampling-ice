@@ -1,5 +1,8 @@
-# safe_ice/distributions/nakagami.py
-"""Nakagami and Inverse Nakagami distributions with scalar/array-friendly APIs.
+# safe_ice/distributions/nakagami_stable.py
+"""Numerically stable Nakagami and Inverse Nakagami distributions.
+
+This module provides numerically stable implementations using log-space computations
+to avoid overflow/underflow issues with extreme parameter values.
 
 Typing policy
 -------------
@@ -29,11 +32,12 @@ def _as_float(x: np.ndarray) -> float:
 # =============================================================================
 # Nakagami(m, Omega) on r > 0
 # pdf(r) = 2 * (m^m / (Gamma(m) * Omega^m)) * r^{2m-1} * exp(-m r^2 / Omega), r >= 0
-# CDF F(r) = P(m, m r^2 / Omega) where P is the regularized lower incomplete gamma
-# Sampling: if X ~ Gamma(shape=m, scale=Omega/m), then R = sqrt(X) ~ Nakagami(m, Omega).
+#
+# Numerically stable version using log-space:
+# log(pdf) = log(2) + m*log(m) - loggamma(m) - m*log(Omega) + (2m-1)*log(r) - m*r^2/Omega
 # =============================================================================
 class NakagamiDistribution:
-    """Nakagami(m, Omega) distribution utilities."""
+    """Nakagami(m, Omega) distribution with numerical stability."""
 
     # -------------------- PDF --------------------
     @overload
@@ -60,43 +64,73 @@ class NakagamiDistribution:
 
         xm = r_arr[mask]
 
-        # Use log-space computation for numerical stability
+        # Compute log PDF for numerical stability
         # log(pdf) = log(2) + m*log(m) - loggamma(m) - m*log(Omega) + (2m-1)*log(xm) - m*xm^2/Omega
         try:
-            # For extreme m values (> 170), use approximation to avoid overflow
-            if m > 170:
-                # For very large m, the distribution becomes extremely concentrated
-                # Use a normal approximation around the mode
-                mode = np.sqrt(Omega * (m - 0.5) / m) if m > 0.5 else 0.0
-                # Variance approximation for large m
-                variance = Omega / (4 * m)
-                std = np.sqrt(variance)
+            log_pdf = (
+                np.log(2.0) +
+                m * np.log(m) -
+                loggamma(m) -
+                m * np.log(Omega) +
+                (2.0 * m - 1.0) * np.log(xm) -
+                m * (xm ** 2) / Omega
+            )
 
-                # Use normal PDF approximation
-                pdf_values = (1.0 / (std * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((xm - mode) / std) ** 2)
-                out[mask] = pdf_values
-            else:
-                # Standard log-space computation for reasonable m values
-                log_pdf = (
-                    np.log(2.0) +
-                    m * np.log(m) -
-                    loggamma(m) -
-                    m * np.log(Omega) +
-                    (2.0 * m - 1.0) * np.log(xm) -
-                    m * (xm ** 2) / Omega
-                )
-
-                # Convert back from log-space, handling potential underflow
-                pdf_values = np.exp(log_pdf)
-                # Handle numerical underflow
-                pdf_values = np.where(np.isfinite(pdf_values), pdf_values, 0.0)
-                out[mask] = pdf_values
+            # Convert back from log-space, handling potential underflow
+            pdf_values = np.exp(log_pdf)
+            # Handle numerical underflow
+            pdf_values = np.where(np.isfinite(pdf_values), pdf_values, 0.0)
+            out[mask] = pdf_values
 
         except (OverflowError, FloatingPointError):
-            # Fallback: return 0 for numerical issues
-            out[mask] = 0.0
+            # For extreme values where even log-space fails, use approximations or return 0
+            # This typically happens when m is extremely large (>170)
+            # In such cases, the distribution becomes extremely concentrated
+            # For practical purposes, we can return 0 for most values
+
+            # Check if we're near the mode
+            mode = np.sqrt(Omega * (m - 0.5) / m) if m > 0.5 else 0.0
+            near_mode = np.abs(xm - mode) < 0.1 * mode if mode > 0 else False
+
+            # Return small non-zero values only near the mode
+            out[mask] = np.where(near_mode, 1e-10, 0.0)
 
         # Return scalar if input was scalar
+        if np.isscalar(r) or np.asarray(r).ndim == 0:
+            return _as_float(out)
+        return out
+
+    # -------------------- Log PDF --------------------
+    @staticmethod
+    def log_pdf(r: npt.ArrayLike, m: float, Omega: float) -> float | NDArrayF:
+        """Compute log PDF directly for numerical stability."""
+        r_arr: NDArrayF = np.asarray(r, dtype=np.float64)
+        m = float(m)
+        Omega = float(Omega)
+
+        # Initialize with -inf (log(0))
+        out: NDArrayF = np.full_like(r_arr, -np.inf, dtype=np.float64)
+        mask = r_arr > 0.0
+
+        if not np.any(mask):
+            if np.isscalar(r) or np.asarray(r).ndim == 0:
+                return -np.inf
+            return out
+
+        xm = r_arr[mask]
+
+        # Compute log PDF
+        log_pdf = (
+            np.log(2.0) +
+            m * np.log(m) -
+            loggamma(m) -
+            m * np.log(Omega) +
+            (2.0 * m - 1.0) * np.log(xm) -
+            m * (xm ** 2) / Omega
+        )
+
+        out[mask] = log_pdf
+
         if np.isscalar(r) or np.asarray(r).ndim == 0:
             return _as_float(out)
         return out
@@ -122,22 +156,11 @@ class NakagamiDistribution:
         if np.any(mask):
             z = (m * (r_arr[mask] ** 2)) / Omega
 
+            # Handle potential overflow in z
+            z = np.minimum(z, 1e10)  # Cap at a large value to avoid overflow
+
             try:
-                # For extreme m values, use approximation
-                if m > 170:
-                    # Use normal CDF approximation
-                    mode = np.sqrt(Omega * (m - 0.5) / m) if m > 0.5 else 0.0
-                    variance = Omega / (4 * m)
-                    std = np.sqrt(variance)
-
-                    # Normal CDF
-                    from scipy.stats import norm
-                    out[mask] = norm.cdf(r_arr[mask], loc=mode, scale=std)
-                else:
-                    # Handle potential overflow in z
-                    z = np.minimum(z, 700)  # Cap to avoid overflow in gammainc
-
-                    out[mask] = gammainc(m, z)  # regularized lower incomplete gamma
+                out[mask] = gammainc(m, z)  # regularized lower incomplete gamma
             except (OverflowError, FloatingPointError):
                 # For extreme values, use approximation
                 # When z >> m, gammainc(m, z) ≈ 1
@@ -158,11 +181,10 @@ class NakagamiDistribution:
 
         # Handle extreme m values
         if m > 100:
-            # For very large m, Nakagami approaches a normal distribution
+            # For very large m, Nakagami approaches a narrow distribution
             # Use normal approximation: mean ≈ sqrt(Omega), variance ≈ Omega/(4m)
-            mean = np.sqrt(Omega * (m - 0.5) / m) if m > 0.5 else 0.0
-            variance = Omega * (1 - 1 / (4 * m)) / m if m > 0.25 else Omega
-            std = np.sqrt(variance)
+            mean = np.sqrt(Omega)
+            std = np.sqrt(Omega / (4 * m))
             samples = np.random.normal(mean, std, n)
             # Ensure positive values
             return np.abs(samples).astype(np.float64, copy=False)
@@ -182,7 +204,7 @@ class NakagamiDistribution:
 # This produces a heavy-tailed distribution as desired in Safe-ICE.
 # =============================================================================
 class InverseNakagamiDistribution:
-    """Inverse Nakagami distribution defined by Y = 1 / R, R ~ Nakagami(m, Omega)."""
+    """Inverse Nakagami distribution with numerical stability."""
 
     # -------------------- PDF --------------------
     @overload
@@ -207,15 +229,19 @@ class InverseNakagamiDistribution:
             return out
 
         ym = y_arr[mask]
+
         # pdf_Y(y) = f_R(1/y) * (1 / y^2)
+        # Use log-space for numerical stability
         r_inv = 1.0 / ym
 
-        # Get PDF of Nakagami at 1/y (now numerically stable)
-        fr = NakagamiDistribution.pdf(r_inv, m, Omega)  # returns ndarray here
+        # Get log PDF of Nakagami at 1/y
+        log_fr = NakagamiDistribution.log_pdf(r_inv, m, Omega)
 
-        # Compute final PDF
-        pdf_values = fr * (1.0 / (ym ** 2))
-        # Handle any numerical issues
+        # log(pdf_Y) = log(f_R(1/y)) - 2*log(y)
+        log_pdf_y = log_fr - 2.0 * np.log(ym)
+
+        # Convert back from log-space
+        pdf_values = np.exp(log_pdf_y)
         pdf_values = np.where(np.isfinite(pdf_values), pdf_values, 0.0)
         out[mask] = pdf_values
 
@@ -240,10 +266,12 @@ class InverseNakagamiDistribution:
         out: NDArrayF = np.zeros_like(y_arr, dtype=np.float64)
         # For y <= 0, CDF = 0. For y > 0: P(Y <= y) = P(R >= 1/y) = 1 - F_R(1/y).
         mask = y_arr > 0.0
-        ym = y_arr[mask]
-        r_thresh = 1.0 / ym
-        Fr = NakagamiDistribution.cdf(r_thresh, m, Omega)  # ndarray
-        out[mask] = 1.0 - Fr
+
+        if np.any(mask):
+            ym = y_arr[mask]
+            r_thresh = 1.0 / ym
+            Fr = NakagamiDistribution.cdf(r_thresh, m, Omega)  # ndarray
+            out[mask] = 1.0 - Fr
 
         if np.isscalar(y) or np.asarray(y).ndim == 0:
             return _as_float(out)

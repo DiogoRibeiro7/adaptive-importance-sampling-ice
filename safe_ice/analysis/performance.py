@@ -1,7 +1,7 @@
 """Performance evaluation utilities for Safe-ICE."""
 from __future__ import annotations
 
-from typing import Any, Tuple, cast, Callable, Optional, Dict, Tuple, Any
+from typing import Any, Tuple, cast, Callable, Optional, Dict
 import numpy as np
 import numpy.typing as npt
 

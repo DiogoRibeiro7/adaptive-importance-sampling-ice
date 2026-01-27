@@ -1,0 +1,77 @@
+{% set name = "safe-ice" %}
+{% set version = "0.1.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  sha256: # Will be filled when uploading to PyPI
+
+build:
+  number: 0
+  noarch: python
+  script: {{ PYTHON }} -m pip install . -vv
+  entry_points:
+    - safe-ice = safe_ice.cli:main
+
+requirements:
+  host:
+    - python >=3.9
+    - pip
+    - poetry-core >=1.0.0
+  run:
+    - python >=3.9
+    - numpy >=1.21.0
+    - scipy >=1.7.0
+    - matplotlib-base >=3.5.0
+    - typing-extensions >=4.0.0  # [py<310]
+
+test:
+  imports:
+    - safe_ice
+    - safe_ice.core
+    - safe_ice.distributions
+    - safe_ice.optimization
+    - safe_ice.problems
+    - safe_ice.analysis
+  requires:
+    - pytest >=7.0.0
+    - pytest-cov
+  source_files:
+    - tests
+  commands:
+    - safe-ice --help
+    - safe-ice --version
+    - pytest tests/ -v
+
+about:
+  home: https://github.com/yourusername/adaptive-importance-sampling-ice
+  summary: Safe Cross-Entropy-Based Importance Sampling for Rare Event Simulations
+  description: |
+    Safe-ICE is a cutting-edge Python implementation of the Safe Cross-Entropy
+    (Safe-CE) method for rare event simulation. It features automatic component
+    selection through penalized optimization and efficient sampling using von
+    Mises-Fisher Nakagami mixtures (vMFNM).
+
+    Key features:
+    - Automatic component selection with penalized EM
+    - Heavy-tailed distributions for enhanced exploration
+    - Efficient sampling with vMF-Nakagami mixtures
+    - Comprehensive benchmark problems
+    - Type safety with complete type hints
+    - Interactive visualization tools
+    - Adaptive parameter tuning
+    - Support for time-variant and system reliability problems
+
+  license: MIT
+  license_family: MIT
+  license_file: LICENSE
+  doc_url: https://safe-ice.readthedocs.io/
+  dev_url: https://github.com/yourusername/adaptive-importance-sampling-ice
+
+extra:
+  recipe-maintainers:
+    - yourusername
+  feedstock-name: safe-ice-feedstock
