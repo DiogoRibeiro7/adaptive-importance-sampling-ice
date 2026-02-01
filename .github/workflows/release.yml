@@ -109,7 +109,7 @@ jobs:
 
     - name: Extract release notes
       id: extract-release-notes
-      uses: ffurrer2/extract-release-notes@v1
+      uses: ffurrer2/extract-release-notes@v3
 
     - name: Create GitHub Release
       uses: ncipollo/release-action@v1
