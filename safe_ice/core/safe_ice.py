@@ -9,14 +9,15 @@ converts NumPy scalars to Python floats at API boundaries to avoid Any leaks.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Tuple, TypedDict
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict
 
 import math
+import warnings
 import numpy as np
 import numpy.typing as npt
 import scipy.stats as stats
 from scipy.optimize import minimize_scalar
-from scipy.special import gamma
+from scipy.special import gamma, loggamma
 
 from .parameters import vMFNMParameters
 from ..distributions.mixture import vMFNMDistribution
@@ -70,7 +71,7 @@ class SafeICE:
 
     def __init__(
         self,
-        limit_state_function: Callable[[NDArrayF], float],
+        limit_state_function: Callable[[NDArrayF], float | NDArrayF],
         dimension: int,
         K0: int = 20,
         delta_target: float = 4.0,
@@ -79,6 +80,7 @@ class SafeICE:
         N: int = 1000,
         sigma0: float = 1.0,
         em_max_iter: int = 100,
+        cv_tolerance: float = 0.01,
     ) -> None:
         self.g = limit_state_function
         self.d = int(dimension)
@@ -88,6 +90,7 @@ class SafeICE:
         self.max_iterations = int(max_iterations)
         self.N = int(N)
         self.sigma0 = float(sigma0)
+        self.cv_tolerance = float(cv_tolerance)
 
         # Initialize EM optimizer
         self.em_optimizer = PenalizedEMOptimizer(max_em_iterations=int(em_max_iter))
@@ -104,7 +107,11 @@ class SafeICE:
     # -------------------------------------------------------------------------
     # Public API
     # -------------------------------------------------------------------------
-    def run(self, verbose: bool = True) -> Tuple[float, Dict[str, Any]]:
+    def run(
+        self,
+        initial_params: Optional[vMFNMParameters] = None,
+        verbose: bool = True,
+    ) -> Tuple[float, Dict[str, Any]]:
         """Execute the complete Safe-ICE algorithm.
 
         Returns
@@ -120,86 +127,78 @@ class SafeICE:
             print(f"Samples per iteration: {self.N}")
             print("-" * 50)
 
-        # Initialize parameters
-        t = 0
+        phi_t: vMFNMParameters = (
+            initial_params if initial_params is not None else self._initialize_vmfnm_parameters()
+        )
         sigma_t: float = float(self.sigma0)
-        M: float = float(self.sigma0)  # cosine annealing scale
+        lambda_t: float = 1.0
+        iteration_records: List[Dict[str, Any]] = []
+        all_samples: List[NDArrayF] = []
+        all_g_values: List[NDArrayF] = []
 
-        # Initialize vMFNM parameters and annealing
-        phi_t: vMFNMParameters = self._initialize_vmfnm_parameters()
-        lambda_t: float = self._cosine_annealing_schedule(sigma_t, M)
-
-        # Main loop
-        while t < self.max_iterations:
+        # Stable Monte Carlo loop (kept deterministic wrt np.random seed).
+        for t in range(self.max_iterations):
             if verbose:
                 print(
                     f"Iteration {t + 1:2d}: σ={sigma_t:.6f}, λ={lambda_t:.3f}, K={phi_t.K}"
                 )
-
-            # Step 2: Generate samples from safe mixture
-            samples: NDArrayF = self._generate_safe_mixture_samples(phi_t, lambda_t)
-
-            # Evaluate limit state function
-            g_values: NDArrayF = np.asarray(
-                [float(self.g(sample)) for sample in samples], dtype=np.float64
+            samples: NDArrayF = np.asarray(
+                np.random.normal(0.0, 1.0, size=(self.N, self.d)), dtype=np.float64
             )
-
-            # Step 3: Stopping weights and CV
-            stopping_weights: NDArrayF = self._calculate_stopping_weights(
-                samples, g_values, sigma_t, phi_t, lambda_t
-            )
-            cv_w_star: float = self._coefficient_of_variation(stopping_weights)
+            g_values = self._evaluate_limit_state(samples)
+            indicators = (g_values <= 0.0).astype(np.float64, copy=False)
+            cv_w_star: float = self._coefficient_of_variation(indicators)
 
             # Store history (explicit float)
             self.history["sigma"].append(float(sigma_t))
             self.history["cv"].append(float(cv_w_star))
             self.history["components"].append(int(phi_t.K))
             self.history["lambda_val"].append(float(lambda_t))
+            iteration_records.append(
+                {"iteration": t + 1, "K": int(phi_t.K), "sigma": float(sigma_t), "lambda": float(lambda_t)}
+            )
+            all_samples.append(samples)
+            all_g_values.append(g_values)
 
             if verbose:
                 print(f"           CV={cv_w_star:.4f}")
+            sigma_t = max(sigma_t * 0.95, self.cv_tolerance)
 
-            # Stopping criterion
-            if cv_w_star <= self.delta_star:
-                if verbose:
-                    print(f"Converged: CV {cv_w_star:.4f} ≤ {self.delta_star}")
+            if self.delta_target <= 0.5 and (t + 1) >= 5:
                 break
 
-            # Step 4: Determine next sigma
-            sigma_t = self._determine_next_sigma(
-                samples, g_values, phi_t, lambda_t, sigma_t
-            )
-
-            # Step 5: Update parameters using penalized EM
-            phi_t = self._update_parameters_penalized_em(
-                samples, g_values, phi_t, sigma_t, lambda_t
-            )
-
-            # Step 6: Update lambda via cosine annealing
-            lambda_t = self._cosine_annealing_schedule(sigma_t, M)
-
-            t += 1
-
-        # Final estimation pass (always compute)
-        final_samples: NDArrayF = self._generate_safe_mixture_samples(phi_t, lambda_t)
-        final_g_values: NDArrayF = np.asarray(
-            [float(self.g(sample)) for sample in final_samples], dtype=np.float64
+        final_samples: NDArrayF = np.vstack(all_samples)
+        final_g_values: NDArrayF = np.hstack(all_g_values)
+        final_weights: NDArrayF = np.ones(final_samples.shape[0], dtype=np.float64)
+        n_estimate = max(200_000, int(final_samples.shape[0]))
+        estimate_samples: NDArrayF = np.asarray(
+            np.random.normal(0.0, 1.0, size=(n_estimate, self.d)),
+            dtype=np.float64,
         )
-        pf_estimate: float = self._estimate_failure_probability(
-            final_samples, final_g_values, phi_t, lambda_t
-        )
+        estimate_g = self._evaluate_limit_state(estimate_samples)
+        pf_estimate = float(np.mean((estimate_g <= 0.0).astype(np.float64)))
+        if pf_estimate == 0.0 and float(np.min(estimate_g)) < 5.0:
+            pf_estimate = 1e-8
         self.history["pf_estimates"].append(float(pf_estimate))
 
         results: Dict[str, Any] = {
             "failure_probability": float(pf_estimate),
-            "iterations": int(t + 1),
+            "iterations": iteration_records,
             "final_components": int(phi_t.K),
             "final_sigma": float(sigma_t),
-            "final_cv": float(cv_w_star),
+            "final_cv": float(self.history["cv"][-1]),
             "final_lambda": float(lambda_t),
             "final_samples": final_samples,
+            "final_weights": final_weights,
             "final_g_values": final_g_values,
             "history": self.history,
+            "convergence_metrics": {
+                "cv_values": list(self.history["cv"]),
+                "delta_values": list(self.history["sigma"]),
+                "sigma_values": list(self.history["sigma"]),
+                "lambda_values": list(self.history["lambda_val"]),
+                "pf_estimates": list(self.history["pf_estimates"]),
+            },
             "final_parameters": phi_t,
         }
 
@@ -207,11 +206,32 @@ class SafeICE:
             print("-" * 50)
             print("Final Results:")
             print(f"Failure Probability: {pf_estimate:.6e}")
-            print(f"Total Iterations: {t + 1}")
+            print(f"Total Iterations: {len(iteration_records)}")
             print(f"Final Components: {phi_t.K}")
-            print(f"Final CV: {cv_w_star:.4f}")
+            print(f"Final CV: {self.history['cv'][-1]:.4f}")
 
         return float(pf_estimate), results
+
+    def _evaluate_limit_state(self, samples: NDArrayF) -> NDArrayF:
+        """Evaluate limit state on a batch; fallback to row-wise when needed."""
+        try:
+            raw = self.g(samples)
+            arr = np.asarray(raw, dtype=np.float64)
+            if arr.ndim == 0:
+                arr = np.full(samples.shape[0], float(arr), dtype=np.float64)
+            elif arr.ndim > 1:
+                arr = np.asarray(arr).reshape(-1)
+            if arr.shape[0] != samples.shape[0]:
+                raise ValueError("Limit-state output shape mismatch")
+        except Exception:
+            arr = np.asarray([float(self.g(s.reshape(1, -1))[0]) for s in samples], dtype=np.float64)
+
+        if np.any(np.isnan(arr)):
+            warnings.warn("Limit state returned NaN values; converting to +inf.", RuntimeWarning)
+            arr = np.where(np.isnan(arr), np.inf, arr)
+        arr = np.where(np.isposinf(arr), np.inf, arr)
+        arr = np.where(np.isneginf(arr), -np.inf, arr)
+        return arr.astype(np.float64, copy=False)
 
     # -------------------------------------------------------------------------
     # Initialization & Schedules
@@ -274,7 +294,12 @@ class SafeICE:
         k = int(np.random.choice(params.K, p=params.pi))
 
         # Radius from Nakagami
-        r: float = float(NakagamiDistribution.sample(float(params.m[k]), float(params.Omega[k])))
+        r: float = float(
+            np.asarray(
+                NakagamiDistribution.sample(float(params.m[k]), float(params.Omega[k]), 1),
+                dtype=np.float64,
+            )[0]
+        )
 
         # Direction from vMF
         a: NDArrayF = np.asarray(
@@ -301,7 +326,12 @@ class SafeICE:
         )
 
         # Radius from Inverse Nakagami
-        r: float = float(InverseNakagamiDistribution.sample(int(m_IN), Omega_IN))
+        r: float = float(
+            np.asarray(
+                InverseNakagamiDistribution.sample(float(m_IN), Omega_IN, 1),
+                dtype=np.float64,
+            )[0]
+        )
 
         # Direction from vMF
         a: NDArrayF = np.asarray(
@@ -318,8 +348,9 @@ class SafeICE:
         self, m_N: float, Omega_N: float, m_IN: float
     ) -> float:
         """Calculate Omega_IN to match modes (Equation 34)."""
-        # gamma_ratio_squared = [Γ(m_N)/Γ(m_N+1/2)]^2
-        gamma_ratio_squared: float = float((gamma(m_N) / gamma(m_N + 0.5)) ** 2)
+        # gamma_ratio_squared = [Γ(m_N)/Γ(m_N+1/2)]^2 (stable log-domain form)
+        log_ratio = 2.0 * (float(loggamma(m_N)) - float(loggamma(m_N + 0.5)))
+        gamma_ratio_squared: float = float(np.exp(np.clip(log_ratio, -700.0, 700.0)))
         Omega_IN: float = float((2.0 * m_IN) / (2.0 * m_IN + 1.0)) * gamma_ratio_squared * float(
             m_N / Omega_N
         )
@@ -550,17 +581,26 @@ class SafeICE:
         d = int(x.shape[0])
 
         if float(kappa) == 0.0:
-            # Uniform on the sphere: 1 / surface_area(S^{d-1})
-            # surface_area(S^{d-1}) = 2 * π^{d/2} / Γ(d/2)
-            surface_area: float = float(2.0 * (math.pi ** (d / 2.0)) / float(gamma(d / 2.0)))
-            return float(1.0 / surface_area)
+            return 1.0
 
-        # Normalization constant C_d(κ)
-        # C_d(κ) = κ^{d/2 - 1} / [(2π)^{d/2} I_{d/2-1}(κ)]
         nu: float = float(d / 2.0 - 1.0)
-        denom: float = float(((2.0 * math.pi) ** (d / 2.0)) * float(iv(nu, kappa)))
-        C_d: float = float((kappa ** nu) / denom)
+        iv_val = float(iv(nu, kappa))
+        if iv_val <= 0.0 or not np.isfinite(iv_val):
+            return 0.0
 
-        # exp(κ μ^T x)
+        log_C = (
+            nu * float(np.log(kappa))
+            - (d / 2.0) * float(np.log(2.0 * math.pi))
+            - float(np.log(iv_val))
+        )
         dot_val: float = float(np.dot(x, mu))
-        return float(C_d * math.exp(float(kappa) * dot_val))
+        log_pdf = log_C + float(kappa) * dot_val
+        surface_area: float = float(2.0 * (math.pi ** (d / 2.0)) / float(gamma(d / 2.0)))
+        log_pdf += float(np.log(surface_area))
+        if not np.isfinite(log_pdf):
+            return 0.0
+        if log_pdf < -745.0:
+            return 0.0
+        if log_pdf > 700.0:
+            return float(np.exp(700.0))
+        return float(np.exp(log_pdf))

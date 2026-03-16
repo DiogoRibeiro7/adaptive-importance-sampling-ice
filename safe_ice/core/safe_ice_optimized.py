@@ -9,12 +9,23 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import numpy as np
 import numpy.typing as npt
 from scipy.stats import chi2
-from numba import jit, prange
+
+try:
+    from numba import jit, prange
+except ImportError:
+    # Optional acceleration: keep API compatible when numba is unavailable.
+    def jit(*args: Any, **kwargs: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+            return func
+
+        return decorator
+
+    def prange(*args: Any, **kwargs: Any) -> range:  # type: ignore[misc]
+        return range(*args)
 
 from .parameters import vMFNMParameters
-from ..distributions.nakagami import NakagamiDistribution
-from ..distributions.inverse_nakagami import InverseNakagamiDistribution
-from ..distributions.von_mises_fisher import VonMisesFisherSampler
+from ..distributions.nakagami import InverseNakagamiDistribution, NakagamiDistribution
+from ..distributions.vmf import VonMisesFisherSampler
 from ..optimization.penalized_em import PenalizedEMOptimizer
 
 # Type alias for NumPy float arrays
@@ -350,9 +361,9 @@ class OptimizedSafeICE:
                 continue
 
             # Sample radii (vectorized)
-            radii = NakagamiDistribution(
-                float(params.m[k]), float(params.Omega[k])
-            ).sample(n_k)
+            radii = NakagamiDistribution.sample(
+                float(params.m[k]), float(params.Omega[k]), n_k
+            )
 
             # Sample directions (already vectorized in VonMisesFisherSampler)
             directions = VonMisesFisherSampler.sample(
@@ -384,9 +395,9 @@ class OptimizedSafeICE:
             )
 
             # Sample radii from inverse Nakagami
-            radii = InverseNakagamiDistribution(
-                float(self.m_IN), omega_in
-            ).sample(n_k)
+            radii = InverseNakagamiDistribution.sample(
+                float(self.m_IN), omega_in, n_k
+            )
 
             # Sample directions
             directions = VonMisesFisherSampler.sample(
@@ -491,9 +502,9 @@ class OptimizedSafeICE:
         # For each component
         for k in range(params.K):
             # Radial density (Nakagami)
-            radial_density = NakagamiDistribution(
-                float(params.m[k]), float(params.Omega[k]) * sigma**2
-            ).pdf(radii)
+            radial_density = NakagamiDistribution.pdf(
+                radii, float(params.m[k]), float(params.Omega[k]) * sigma**2
+            )
 
             # Angular density (vMF) - vectorized dot product
             angular_density = np.exp(
@@ -530,9 +541,9 @@ class OptimizedSafeICE:
             )
 
             # Radial density (Inverse Nakagami)
-            radial_density = InverseNakagamiDistribution(
-                float(self.m_IN), omega_in
-            ).pdf(radii)
+            radial_density = InverseNakagamiDistribution.pdf(
+                radii, float(self.m_IN), omega_in
+            )
 
             # Angular density (vMF)
             angular_density = np.exp(

@@ -61,10 +61,11 @@ class vMFNMDistribution:
                 r = 1e-12
 
             mix_val: float = 0.0
+            jacobian = float(max(r, 1e-12) ** (d - 1))
             for k in range(self.params.K):
                 nak = float(NakagamiDistribution.pdf(r, float(self.params.m[k]), float(self.params.Omega[k])))
                 vmf = float(self._vmf_pdf(a, self.params.mu[k], float(self.params.kappa[k])))
-                mix_val += float(self.params.pi[k]) * nak * vmf
+                mix_val += float(self.params.pi[k]) * nak * vmf / jacobian
             out[i] = mix_val
         return out
 
@@ -72,10 +73,29 @@ class vMFNMDistribution:
         """von Mises–Fisher pdf at unit x (internal helper)."""
         d = int(x.size)
         if kappa <= 0.0:
-            return float(1.0 / sphere_surface_area(d))
+            return 1.0
         v = d / 2.0 - 1.0
-        C = float((kappa**v) / (((2.0 * np.pi) ** (d / 2.0)) * iv(v, kappa)))
-        return float(C * np.exp(kappa * float(x @ mu)))
+        iv_val = float(iv(v, kappa))
+        if iv_val <= 0.0 or not np.isfinite(iv_val):
+            return 0.0
+
+        # Stable log-domain evaluation:
+        # log f(x) = log C_d(kappa) + kappa * (x^T mu)
+        log_C = (
+            v * float(np.log(kappa))
+            - (d / 2.0) * float(np.log(2.0 * np.pi))
+            - float(np.log(iv_val))
+        )
+        log_pdf = log_C + kappa * float(x @ mu)
+        # Use density relative to the normalized angular measure used internally.
+        log_pdf += float(np.log(sphere_surface_area(d)))
+        if not np.isfinite(log_pdf):
+            return 0.0
+        if log_pdf < -745.0:
+            return 0.0
+        if log_pdf > 700.0:
+            return float(np.exp(700.0))
+        return float(np.exp(log_pdf))
 
     def sample(self, n_samples: int) -> NDArrayF:
         """Sample from the mixture. Returns (n_samples, d)."""
@@ -92,7 +112,7 @@ class vMFNMDistribution:
 
     def log_likelihood(self, x: npt.ArrayLike) -> float:
         pdf_vals = self.pdf(x)
-        return float(np.sum(np.log(np.maximum(pdf_vals, 1e-15))))
+        return float(np.mean(np.log(np.maximum(pdf_vals, 1e-15))))
 
 
 def sphere_surface_area(d: int) -> float:

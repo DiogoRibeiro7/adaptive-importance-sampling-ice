@@ -15,7 +15,7 @@ import numpy.typing as npt
 NDArrayF = npt.NDArray[np.float64]
 
 
-@dataclass
+@dataclass(init=False)
 class vMFNMParameters:
     """Parameters for the von Mises–Fisher + Nakagami mixture (vMFNM).
 
@@ -38,6 +38,28 @@ class vMFNMParameters:
     Omega: NDArrayF       # (K,)
     mu: NDArrayF          # (K, d)
     kappa: NDArrayF       # (K,)
+
+    def __init__(
+        self,
+        pi: NDArrayF,
+        m: NDArrayF,
+        Omega: NDArrayF,
+        mu: NDArrayF,
+        kappa: NDArrayF,
+        K: int | None = None,
+        d: int | None = None,
+    ) -> None:
+        # K/d are accepted for backward compatibility with older call sites/tests.
+        self.pi = np.asarray(pi, dtype=np.float64)
+        self.m = np.asarray(m, dtype=np.float64)
+        self.Omega = np.asarray(Omega, dtype=np.float64)
+        self.mu = np.asarray(mu, dtype=np.float64)
+        self.kappa = np.asarray(kappa, dtype=np.float64)
+
+        if K is not None and int(K) != int(self.pi.shape[0]):
+            raise ValueError("Provided K is inconsistent with parameter array shapes.")
+        if d is not None and int(d) != int(self.mu.shape[1]):
+            raise ValueError("Provided d is inconsistent with mu shape.")
 
     @property
     def K(self) -> int:

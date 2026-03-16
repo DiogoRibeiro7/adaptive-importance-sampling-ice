@@ -298,7 +298,8 @@ class PenalizedEMOptimizer:
 
     def _estimate_kappa(self, R: float, d: int) -> float:
         """Estimate concentration parameter kappa from mean resultant length R."""
-        if R >= 1.0:
+        R = float(min(max(R, 0.0), 1.0 - 1e-12))
+        if R >= 1.0 - 1e-12:
             return 1_000.0  # very concentrated
 
         if d == 2:
@@ -308,7 +309,10 @@ class PenalizedEMOptimizer:
             elif R < 0.85:
                 return float(-0.4 + 1.39 * R + 0.43 / (1.0 - R))
             else:
-                return float(1.0 / (R ** 3 - 4.0 * R ** 2 + 3.0 * R))
+                denom = R ** 3 - 4.0 * R ** 2 + 3.0 * R
+                if abs(denom) < 1e-12:
+                    return 1_000.0
+                return float(1.0 / denom)
         else:
             # Higher dimensions: Banerjee et al. style approximation
             return float(R * (d - R ** 2) / (1.0 - R ** 2))
@@ -321,15 +325,29 @@ class PenalizedEMOptimizer:
         d = int(x.shape[0])
 
         if float(kappa) == 0.0:
-            # Uniform on sphere: 1 / surface_area(S^{d-1})
-            surface_area: float = float(2.0 * (math.pi ** (d / 2.0)) / float(gamma(d / 2.0)))
-            return float(1.0 / surface_area)
+            return 1.0
 
         nu: float = float(d / 2.0 - 1.0)
-        denom: float = float(((2.0 * math.pi) ** (d / 2.0)) * float(iv(nu, kappa)))
-        C_d: float = float((kappa ** nu) / denom)
+        iv_val: float = float(iv(nu, kappa))
+        if iv_val <= 0.0 or not np.isfinite(iv_val):
+            return 0.0
+
+        log_C = (
+            nu * float(np.log(kappa))
+            - (d / 2.0) * float(np.log(2.0 * math.pi))
+            - float(np.log(iv_val))
+        )
         dot_val: float = float(np.dot(x, mu))
-        return float(C_d * math.exp(float(kappa) * dot_val))
+        log_pdf = log_C + float(kappa) * dot_val
+        surface_area: float = float(2.0 * (math.pi ** (d / 2.0)) / float(gamma(d / 2.0)))
+        log_pdf += float(np.log(surface_area))
+        if not np.isfinite(log_pdf):
+            return 0.0
+        if log_pdf < -745.0:
+            return 0.0
+        if log_pdf > 700.0:
+            return float(np.exp(700.0))
+        return float(np.exp(log_pdf))
 
     def _update_beta(self, params: vMFNMParameters, beta: float, K: int) -> float:
         """Update penalty parameter beta (simple adaptive heuristic)."""
