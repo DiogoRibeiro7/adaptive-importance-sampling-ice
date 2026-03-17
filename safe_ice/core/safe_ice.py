@@ -17,7 +17,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy.stats as stats
 from scipy.optimize import minimize_scalar
-from scipy.special import gamma, loggamma
+from scipy.special import gamma, ive, loggamma
 
 from .parameters import vMFNMParameters
 from ..distributions.mixture import vMFNMDistribution
@@ -128,58 +128,96 @@ class SafeICE:
             print("-" * 50)
 
         phi_t: vMFNMParameters = (
-            initial_params if initial_params is not None else self._initialize_vmfnm_parameters()
+            initial_params
+            if initial_params is not None
+            else self._initialize_vmfnm_parameters()
         )
         sigma_t: float = float(self.sigma0)
-        lambda_t: float = 1.0
+        M: float = float(self.sigma0)  # cosine annealing scale
+        lambda_t: float = self._cosine_annealing_schedule(sigma_t, M)
         iteration_records: List[Dict[str, Any]] = []
         all_samples: List[NDArrayF] = []
         all_g_values: List[NDArrayF] = []
 
-        # Stable Monte Carlo loop (kept deterministic wrt np.random seed).
         for t in range(self.max_iterations):
             if verbose:
                 print(
-                    f"Iteration {t + 1:2d}: σ={sigma_t:.6f}, λ={lambda_t:.3f}, K={phi_t.K}"
+                    f"Iteration {t + 1:2d}: "
+                    f"\u03c3={sigma_t:.6f}, \u03bb={lambda_t:.3f}, "
+                    f"K={phi_t.K}"
                 )
-            samples: NDArrayF = np.asarray(
-                np.random.normal(0.0, 1.0, size=(self.N, self.d)), dtype=np.float64
-            )
-            g_values = self._evaluate_limit_state(samples)
-            indicators = (g_values <= 0.0).astype(np.float64, copy=False)
-            cv_w_star: float = self._coefficient_of_variation(indicators)
 
-            # Store history (explicit float)
+            # Generate samples from safe importance mixture
+            samples: NDArrayF = self._generate_safe_mixture_samples(
+                phi_t, lambda_t
+            )
+            g_values: NDArrayF = self._evaluate_limit_state(samples)
+
+            # Stopping weights and CV
+            stopping_weights: NDArrayF = (
+                self._calculate_stopping_weights(
+                    samples, g_values, sigma_t, phi_t, lambda_t
+                )
+            )
+            cv_w_star: float = self._coefficient_of_variation(
+                stopping_weights
+            )
+
+            # Record history
             self.history["sigma"].append(float(sigma_t))
             self.history["cv"].append(float(cv_w_star))
             self.history["components"].append(int(phi_t.K))
             self.history["lambda_val"].append(float(lambda_t))
-            iteration_records.append(
-                {"iteration": t + 1, "K": int(phi_t.K), "sigma": float(sigma_t), "lambda": float(lambda_t)}
-            )
+            iteration_records.append({
+                "iteration": t + 1,
+                "K": int(phi_t.K),
+                "sigma": float(sigma_t),
+                "lambda": float(lambda_t),
+            })
             all_samples.append(samples)
             all_g_values.append(g_values)
 
             if verbose:
                 print(f"           CV={cv_w_star:.4f}")
-            sigma_t = max(sigma_t * 0.95, self.cv_tolerance)
 
-            if self.delta_target <= 0.5 and (t + 1) >= 5:
+            # Convergence check using delta_star
+            if cv_w_star <= self.delta_star and (t + 1) >= 2:
+                if verbose:
+                    print(
+                        f"  Converged: CV {cv_w_star:.4f} "
+                        f"<= delta_star {self.delta_star}"
+                    )
                 break
 
-        final_samples: NDArrayF = np.vstack(all_samples)
-        final_g_values: NDArrayF = np.hstack(all_g_values)
-        final_weights: NDArrayF = np.ones(final_samples.shape[0], dtype=np.float64)
-        n_estimate = max(200_000, int(final_samples.shape[0]))
-        estimate_samples: NDArrayF = np.asarray(
-            np.random.normal(0.0, 1.0, size=(n_estimate, self.d)),
-            dtype=np.float64,
+            # Adapt sigma
+            sigma_t = self._determine_next_sigma(
+                samples, g_values, phi_t, lambda_t, sigma_t
+            )
+
+            # Update mixture parameters via penalized EM
+            phi_t = self._update_parameters_penalized_em(
+                samples, g_values, phi_t, sigma_t, lambda_t
+            )
+
+            # Update lambda via cosine annealing
+            lambda_t = self._cosine_annealing_schedule(sigma_t, M)
+
+        # --- Final estimate via importance sampling (not crude MC) ---
+        final_samples: NDArrayF = self._generate_safe_mixture_samples(
+            phi_t, lambda_t
         )
-        estimate_g = self._evaluate_limit_state(estimate_samples)
-        pf_estimate = float(np.mean((estimate_g <= 0.0).astype(np.float64)))
-        if pf_estimate == 0.0 and float(np.min(estimate_g)) < 5.0:
-            pf_estimate = 1e-8
+        final_g_values: NDArrayF = self._evaluate_limit_state(
+            final_samples
+        )
+        pf_estimate: float = self._estimate_failure_probability(
+            final_samples, final_g_values, phi_t, lambda_t
+        )
+
         self.history["pf_estimates"].append(float(pf_estimate))
+
+        # Collect all iteration samples for diagnostics
+        all_samples_arr: NDArrayF = np.vstack(all_samples)
+        all_g_arr: NDArrayF = np.hstack(all_g_values)
 
         results: Dict[str, Any] = {
             "failure_probability": float(pf_estimate),
@@ -188,9 +226,11 @@ class SafeICE:
             "final_sigma": float(sigma_t),
             "final_cv": float(self.history["cv"][-1]),
             "final_lambda": float(lambda_t),
-            "final_samples": final_samples,
-            "final_weights": final_weights,
-            "final_g_values": final_g_values,
+            "final_samples": all_samples_arr,
+            "final_weights": np.ones(
+                all_samples_arr.shape[0], dtype=np.float64
+            ),
+            "final_g_values": all_g_arr,
             "history": self.history,
             "convergence_metrics": {
                 "cv_values": list(self.history["cv"]),
@@ -575,28 +615,37 @@ class SafeICE:
     # vMF single-point PDF
     # -------------------------------------------------------------------------
     def _vmf_pdf_single(self, x: NDArrayF, mu: NDArrayF, kappa: float) -> float:
-        """von Mises–Fisher PDF for a single point x on S^{d-1}."""
-        from scipy.special import iv
+        """von Mises–Fisher PDF for a single point x on S^{d-1}.
 
+        Returns the density with respect to the surface area measure on the
+        unit sphere, so that ∫_{S^{d-1}} f(a) dω(a) = 1.
+        """
         d = int(x.shape[0])
 
         if float(kappa) == 0.0:
-            return 1.0
+            # Uniform density on S^{d-1}: 1 / surface_area
+            surface_area: float = float(
+                2.0 * (math.pi ** (d / 2.0)) / float(gamma(d / 2.0))
+            )
+            return 1.0 / surface_area
 
         nu: float = float(d / 2.0 - 1.0)
-        iv_val = float(iv(nu, kappa))
-        if iv_val <= 0.0 or not np.isfinite(iv_val):
+
+        # Use exponentially-scaled Bessel to avoid overflow for large κ:
+        # ive(ν, κ) = iv(ν, κ) · exp(−κ), so log iv(ν, κ) = log ive(ν, κ) + κ
+        ive_val: float = float(ive(nu, kappa))
+        if ive_val <= 0.0 or not np.isfinite(ive_val):
             return 0.0
 
-        log_C = (
+        log_C: float = (
             nu * float(np.log(kappa))
             - (d / 2.0) * float(np.log(2.0 * math.pi))
-            - float(np.log(iv_val))
+            - float(np.log(ive_val))
+            - float(kappa)
         )
         dot_val: float = float(np.dot(x, mu))
-        log_pdf = log_C + float(kappa) * dot_val
-        surface_area: float = float(2.0 * (math.pi ** (d / 2.0)) / float(gamma(d / 2.0)))
-        log_pdf += float(np.log(surface_area))
+        log_pdf: float = log_C + float(kappa) * dot_val
+
         if not np.isfinite(log_pdf):
             return 0.0
         if log_pdf < -745.0:

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 import numpy.typing as npt
-from scipy.special import iv, gamma  # noqa: F401
+from scipy.special import iv, ive, gamma  # noqa: F401
 
 from ..core.parameters import vMFNMParameters
 from .vmf import VonMisesFisherSampler
@@ -70,25 +70,24 @@ class vMFNMDistribution:
         return out
 
     def _vmf_pdf(self, x: NDArrayF, mu: NDArrayF, kappa: float) -> float:
-        """von Mises–Fisher pdf at unit x (internal helper)."""
+        """von Mises–Fisher pdf at unit x w.r.t. the surface area measure."""
         d = int(x.size)
         if kappa <= 0.0:
-            return 1.0
+            return 1.0 / sphere_surface_area(d)
         v = d / 2.0 - 1.0
-        iv_val = float(iv(v, kappa))
-        if iv_val <= 0.0 or not np.isfinite(iv_val):
+
+        # Use exponentially-scaled Bessel to avoid overflow for large κ
+        ive_val = float(ive(v, kappa))
+        if ive_val <= 0.0 or not np.isfinite(ive_val):
             return 0.0
 
-        # Stable log-domain evaluation:
-        # log f(x) = log C_d(kappa) + kappa * (x^T mu)
         log_C = (
             v * float(np.log(kappa))
             - (d / 2.0) * float(np.log(2.0 * np.pi))
-            - float(np.log(iv_val))
+            - float(np.log(ive_val))
+            - kappa
         )
         log_pdf = log_C + kappa * float(x @ mu)
-        # Use density relative to the normalized angular measure used internally.
-        log_pdf += float(np.log(sphere_surface_area(d)))
         if not np.isfinite(log_pdf):
             return 0.0
         if log_pdf < -745.0:
@@ -112,7 +111,7 @@ class vMFNMDistribution:
 
     def log_likelihood(self, x: npt.ArrayLike) -> float:
         pdf_vals = self.pdf(x)
-        return float(np.mean(np.log(np.maximum(pdf_vals, 1e-15))))
+        return float(np.sum(np.log(np.maximum(pdf_vals, 1e-15))))
 
 
 def sphere_surface_area(d: int) -> float:

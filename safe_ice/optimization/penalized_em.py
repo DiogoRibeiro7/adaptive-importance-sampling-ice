@@ -8,7 +8,7 @@ from typing import Tuple
 import math
 import numpy as np
 import numpy.typing as npt
-from scipy.special import iv, gamma
+from scipy.special import iv, ive, gamma
 
 from ..core.parameters import vMFNMParameters
 from ..distributions.nakagami import NakagamiDistribution
@@ -321,26 +321,32 @@ class PenalizedEMOptimizer:
     # Utilities
     # -------------------------------------------------------------------------
     def _vmf_pdf_single(self, x: NDArrayF, mu: NDArrayF, kappa: float) -> float:
-        """von Mises–Fisher PDF for a single point."""
+        """von Mises–Fisher PDF for a single point w.r.t. surface area measure."""
         d = int(x.shape[0])
 
         if float(kappa) == 0.0:
-            return 1.0
+            # Uniform density on S^{d-1}: 1 / surface_area
+            surface_area: float = float(
+                2.0 * (math.pi ** (d / 2.0)) / float(gamma(d / 2.0))
+            )
+            return 1.0 / surface_area
 
         nu: float = float(d / 2.0 - 1.0)
-        iv_val: float = float(iv(nu, kappa))
-        if iv_val <= 0.0 or not np.isfinite(iv_val):
+
+        # Use exponentially-scaled Bessel to avoid overflow for large κ
+        ive_val: float = float(ive(nu, kappa))
+        if ive_val <= 0.0 or not np.isfinite(ive_val):
             return 0.0
 
         log_C = (
             nu * float(np.log(kappa))
             - (d / 2.0) * float(np.log(2.0 * math.pi))
-            - float(np.log(iv_val))
+            - float(np.log(ive_val))
+            - float(kappa)
         )
         dot_val: float = float(np.dot(x, mu))
         log_pdf = log_C + float(kappa) * dot_val
-        surface_area: float = float(2.0 * (math.pi ** (d / 2.0)) / float(gamma(d / 2.0)))
-        log_pdf += float(np.log(surface_area))
+
         if not np.isfinite(log_pdf):
             return 0.0
         if log_pdf < -745.0:

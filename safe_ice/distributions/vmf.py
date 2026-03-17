@@ -50,23 +50,29 @@ class VonMisesFisherSampler:
             norms = np.maximum(norms, eps)
             return (samples / norms).astype(np.float64, copy=False)
 
-        # High-concentration regime: numerically stable local Gaussian
-        # approximation around mu on the tangent space.
+        # Special case: d == 2 (circular Von Mises) — must come before the
+        # high-κ tangent-space shortcut so that 2-D calls always use the
+        # exact circular sampler.
+        if d == 2:
+            return VonMisesFisherSampler._sample_circular(mu_unit, float(kappa), n_samples)
+
+        # High-concentration regime (d >= 3): numerically stable local
+        # Gaussian approximation around mu on the tangent space.
         if kappa >= 30.0:
             noise_scale = 0.2 / math.sqrt(float(kappa))
             raw: NDArrayF = np.asarray(
-                mu_unit + np.random.normal(0.0, noise_scale, size=(n_samples, d)),
+                mu_unit + np.random.normal(
+                    0.0, noise_scale, size=(n_samples, d)
+                ),
                 dtype=np.float64,
             )
-            norms: NDArrayF = np.linalg.norm(raw, axis=1, keepdims=True).astype(
-                np.float64, copy=False
-            )
-            eps: float = float(np.finfo(np.float64).tiny)
-            return (raw / np.maximum(norms, eps)).astype(np.float64, copy=False)
-
-        # Special case: d == 2 (circular Von Mises)
-        if d == 2:
-            return VonMisesFisherSampler._sample_circular(mu_unit, float(kappa), n_samples)
+            norms_h: NDArrayF = np.linalg.norm(
+                raw, axis=1, keepdims=True
+            ).astype(np.float64, copy=False)
+            eps_h: float = float(np.finfo(np.float64).tiny)
+            return (
+                raw / np.maximum(norms_h, eps_h)
+            ).astype(np.float64, copy=False)
 
         # General case d >= 3
         out: NDArrayF = np.zeros((n_samples, d), dtype=np.float64)

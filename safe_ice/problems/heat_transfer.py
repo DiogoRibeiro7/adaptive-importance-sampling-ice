@@ -88,9 +88,8 @@ class HeatTransferProblem:
         self.eigenvecs = eigenvecs[:, idx][:, : self.n_terms].astype(
             np.float64, copy=False
         )
-        # Compatibility aliases expected by tests/public callers.
+        # Compatibility alias for eigenvalues (not affected by normalization).
         self.eigenvalues = self.eigenvals
-        self.eigenvectors = self.eigenvecs[:50, :]
 
         # --- Vectorized, type-stable column normalization ---
         # Norms as a (1, n_terms) array (keepdims=True prevents scalar return)
@@ -104,6 +103,10 @@ class HeatTransferProblem:
 
         # Broadcasted normalization: (n_points, n_terms) / (1, n_terms)
         self.eigenvecs = self.eigenvecs / norms
+
+        # Assign eigenvectors alias AFTER normalization so it exposes
+        # the normalized modes, not the stale pre-normalization ones.
+        self.eigenvectors = self.eigenvecs[:50, :]
 
     def generate_permeability_field(self, xi: npt.ArrayLike) -> NDArrayF:
         """Generate lognormal permeability field from the KL expansion."""
@@ -212,9 +215,6 @@ class HeatTransferProblem:
                 kappa_field = self.generate_permeability_field(sample)
                 T_field = self.solve_heat_equation(kappa_field)
                 T_avg = float(np.mean(T_field[eval_mask], dtype=np.float64))
-                # Add a small deterministic KL-driven term to preserve
-                # monotonic sensitivity in lightweight test environments.
-                T_avg += 0.5 * float(np.mean(sample))
                 g_values[i] = limit_threshold - T_avg
 
             if is_single:
