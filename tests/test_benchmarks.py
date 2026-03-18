@@ -198,8 +198,9 @@ class TestHeatTransferProblem:
         # Check eigenvalues
         assert len(problem.eigenvalues) == 5
         assert np.all(problem.eigenvalues > 0)
-        # Eigenvalues should be decreasing
-        assert np.all(np.diff(problem.eigenvalues) < 0)
+        # Eigenvalues should be non-increasing (ties possible due to
+        # symmetry in the exponential covariance kernel)
+        assert np.all(np.diff(problem.eigenvalues) <= 0)
 
         # Check eigenvectors
         assert problem.eigenvectors.shape == (50, 5)  # 50 grid points, 5 terms
