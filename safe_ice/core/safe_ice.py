@@ -81,6 +81,7 @@ class SafeICE:
         sigma0: float = 1.0,
         em_max_iter: int = 100,
         cv_tolerance: float = 0.01,
+        random_state: Optional[int | np.random.Generator] = None,
     ) -> None:
         self.g = limit_state_function
         self.d = int(dimension)
@@ -91,6 +92,14 @@ class SafeICE:
         self.N = int(N)
         self.sigma0 = float(sigma0)
         self.cv_tolerance = float(cv_tolerance)
+
+        # Deterministic RNG support
+        if random_state is None:
+            self._rng: Any = np.random  # legacy global state
+        elif isinstance(random_state, np.random.Generator):
+            self._rng = random_state
+        else:
+            self._rng = np.random.default_rng(int(random_state))
 
         # Initialize EM optimizer
         self.em_optimizer = PenalizedEMOptimizer(max_em_iterations=int(em_max_iter))
@@ -285,11 +294,11 @@ class SafeICE:
         pi: NDArrayF = np.ones(K, dtype=np.float64) / float(K)
 
         # Nakagami parameters
-        m: NDArrayF = np.asarray(np.random.uniform(1.0, 3.0, K), dtype=np.float64)
-        Omega: NDArrayF = np.asarray(np.random.uniform(0.5, 2.0, K), dtype=np.float64)
+        m: NDArrayF = np.asarray(self._rng.uniform(1.0, 3.0, K), dtype=np.float64)
+        Omega: NDArrayF = np.asarray(self._rng.uniform(0.5, 2.0, K), dtype=np.float64)
 
         # von Mises-Fisher parameters
-        mu: NDArrayF = np.asarray(np.random.normal(0.0, 1.0, (K, d)), dtype=np.float64)
+        mu: NDArrayF = np.asarray(self._rng.normal(0.0, 1.0, (K, d)), dtype=np.float64)
         # Normalize each row to unit norm
         row_norms: NDArrayF = np.linalg.norm(mu, axis=1, keepdims=True).astype(
             np.float64, copy=False
@@ -298,7 +307,7 @@ class SafeICE:
         mu = mu / np.maximum(row_norms, eps)
 
         # Small initial concentrations
-        kappa: NDArrayF = np.asarray(np.random.uniform(0.1, 1.0, K), dtype=np.float64)
+        kappa: NDArrayF = np.asarray(self._rng.uniform(0.1, 1.0, K), dtype=np.float64)
 
         return vMFNMParameters(pi=pi, m=m, Omega=Omega, mu=mu, kappa=kappa)
 
@@ -319,7 +328,7 @@ class SafeICE:
         samples: NDArrayF = np.zeros((self.N, self.d), dtype=np.float64)
 
         for i in range(self.N):
-            if float(np.random.uniform()) < float(lambda_val):
+            if float(self._rng.uniform()) < float(lambda_val):
                 # Sample from light-tailed vMFNM component
                 samples[i] = self._sample_vmfnm_component(params)
             else:
@@ -330,30 +339,31 @@ class SafeICE:
 
     def _sample_vmfnm_component(self, params: vMFNMParameters) -> NDArrayF:
         """Sample a single vector from the vMF-Nakagami mixture."""
-        # Choose component
-        k = int(np.random.choice(params.K, p=params.pi))
+        k = int(self._rng.choice(params.K, p=params.pi))
 
-        # Radius from Nakagami
         r: float = float(
             np.asarray(
-                NakagamiDistribution.sample(float(params.m[k]), float(params.Omega[k]), 1),
+                NakagamiDistribution.sample(
+                    float(params.m[k]), float(params.Omega[k]),
+                    1, rng=self._rng,
+                ),
                 dtype=np.float64,
             )[0]
         )
 
-        # Direction from vMF
         a: NDArrayF = np.asarray(
-            VonMisesFisherSampler.sample(params.mu[k], float(params.kappa[k]), 1)[0],
+            VonMisesFisherSampler.sample(
+                params.mu[k], float(params.kappa[k]),
+                1, rng=self._rng,
+            )[0],
             dtype=np.float64,
         )
 
-        # Return vector r * a
         return (r * a).astype(np.float64, copy=False)
 
     def _sample_heavy_tailed_component(self, params: vMFNMParameters) -> NDArrayF:
         """Sample a single vector from the heavy-tailed inverse-Nakagami component."""
-        # Choose component
-        k = int(np.random.choice(params.K, p=params.pi))
+        k = int(self._rng.choice(params.K, p=params.pi))
 
         # Heavy-tailed parameters: m_IN = ceil(sqrt(d))
         m_IN = max(1, int(math.ceil(math.sqrt(self.d))))
@@ -368,14 +378,19 @@ class SafeICE:
         # Radius from Inverse Nakagami
         r: float = float(
             np.asarray(
-                InverseNakagamiDistribution.sample(float(m_IN), Omega_IN, 1),
+                InverseNakagamiDistribution.sample(
+                    float(m_IN), Omega_IN, 1, rng=self._rng,
+                ),
                 dtype=np.float64,
             )[0]
         )
 
         # Direction from vMF
         a: NDArrayF = np.asarray(
-            VonMisesFisherSampler.sample(params.mu[k], float(params.kappa[k]), 1)[0],
+            VonMisesFisherSampler.sample(
+                params.mu[k], float(params.kappa[k]),
+                1, rng=self._rng,
+            )[0],
             dtype=np.float64,
         )
 

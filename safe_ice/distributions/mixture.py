@@ -96,16 +96,37 @@ class vMFNMDistribution:
             return float(np.exp(700.0))
         return float(np.exp(log_pdf))
 
-    def sample(self, n_samples: int) -> NDArrayF:
-        """Sample from the mixture. Returns (n_samples, d)."""
+    def sample(
+        self, n_samples: int, rng: object = None
+    ) -> NDArrayF:
+        """Sample from the mixture. Returns (n_samples, d).
+
+        Parameters
+        ----------
+        rng : numpy random generator, optional
+            If *None*, the global ``np.random`` state is used.
+        """
+        _rng = rng if rng is not None else np.random
         n, d = int(n_samples), self.params.d
         samples = np.zeros((n, d), dtype=np.float64)
 
-        comp = np.random.choice(self.params.K, size=n, p=self.params.pi)
+        comp = _rng.choice(self.params.K, size=n, p=self.params.pi)
         for i in range(n):
             k = int(comp[i])
-            r_i = float(NakagamiDistribution.sample(float(self.params.m[k]), float(self.params.Omega[k]), 1)[0])
-            a_i = VonMisesFisherSampler.sample(self.params.mu[k], float(self.params.kappa[k]), 1)[0]
+            r_i = float(
+                NakagamiDistribution.sample(
+                    float(self.params.m[k]),
+                    float(self.params.Omega[k]),
+                    1,
+                    rng=rng,
+                )[0]
+            )
+            a_i = VonMisesFisherSampler.sample(
+                self.params.mu[k],
+                float(self.params.kappa[k]),
+                1,
+                rng=rng,
+            )[0]
             samples[i] = r_i * a_i
         return samples
 
