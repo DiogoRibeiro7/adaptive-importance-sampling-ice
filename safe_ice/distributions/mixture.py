@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 import numpy.typing as npt
-from scipy.special import iv, gamma  # noqa: F401
+from scipy.special import iv, ive, gamma  # noqa: F401
 
 from ..core.parameters import vMFNMParameters
 from .vmf import VonMisesFisherSampler
@@ -61,32 +61,72 @@ class vMFNMDistribution:
                 r = 1e-12
 
             mix_val: float = 0.0
+            jacobian = float(max(r, 1e-12) ** (d - 1))
             for k in range(self.params.K):
                 nak = float(NakagamiDistribution.pdf(r, float(self.params.m[k]), float(self.params.Omega[k])))
                 vmf = float(self._vmf_pdf(a, self.params.mu[k], float(self.params.kappa[k])))
-                mix_val += float(self.params.pi[k]) * nak * vmf
+                mix_val += float(self.params.pi[k]) * nak * vmf / jacobian
             out[i] = mix_val
         return out
 
     def _vmf_pdf(self, x: NDArrayF, mu: NDArrayF, kappa: float) -> float:
-        """von Mises–Fisher pdf at unit x (internal helper)."""
+        """von Mises–Fisher pdf at unit x w.r.t. the surface area measure."""
         d = int(x.size)
         if kappa <= 0.0:
-            return float(1.0 / sphere_surface_area(d))
+            return 1.0 / sphere_surface_area(d)
         v = d / 2.0 - 1.0
-        C = float((kappa**v) / (((2.0 * np.pi) ** (d / 2.0)) * iv(v, kappa)))
-        return float(C * np.exp(kappa * float(x @ mu)))
 
-    def sample(self, n_samples: int) -> NDArrayF:
-        """Sample from the mixture. Returns (n_samples, d)."""
+        # Use exponentially-scaled Bessel to avoid overflow for large κ
+        ive_val = float(ive(v, kappa))
+        if ive_val <= 0.0 or not np.isfinite(ive_val):
+            return 0.0
+
+        log_C = (
+            v * float(np.log(kappa))
+            - (d / 2.0) * float(np.log(2.0 * np.pi))
+            - float(np.log(ive_val))
+            - kappa
+        )
+        log_pdf = log_C + kappa * float(x @ mu)
+        if not np.isfinite(log_pdf):
+            return 0.0
+        if log_pdf < -745.0:
+            return 0.0
+        if log_pdf > 700.0:
+            return float(np.exp(700.0))
+        return float(np.exp(log_pdf))
+
+    def sample(
+        self, n_samples: int, rng: object = None
+    ) -> NDArrayF:
+        """Sample from the mixture. Returns (n_samples, d).
+
+        Parameters
+        ----------
+        rng : numpy random generator, optional
+            If *None*, the global ``np.random`` state is used.
+        """
+        _rng = rng if rng is not None else np.random
         n, d = int(n_samples), self.params.d
         samples = np.zeros((n, d), dtype=np.float64)
 
-        comp = np.random.choice(self.params.K, size=n, p=self.params.pi)
+        comp = _rng.choice(self.params.K, size=n, p=self.params.pi)
         for i in range(n):
             k = int(comp[i])
-            r_i = float(NakagamiDistribution.sample(float(self.params.m[k]), float(self.params.Omega[k]), 1)[0])
-            a_i = VonMisesFisherSampler.sample(self.params.mu[k], float(self.params.kappa[k]), 1)[0]
+            r_i = float(
+                NakagamiDistribution.sample(
+                    float(self.params.m[k]),
+                    float(self.params.Omega[k]),
+                    1,
+                    rng=rng,
+                )[0]
+            )
+            a_i = VonMisesFisherSampler.sample(
+                self.params.mu[k],
+                float(self.params.kappa[k]),
+                1,
+                rng=rng,
+            )[0]
             samples[i] = r_i * a_i
         return samples
 

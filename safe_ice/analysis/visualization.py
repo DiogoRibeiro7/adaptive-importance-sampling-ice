@@ -1,7 +1,7 @@
 """Visualization and advanced analysis tools for Safe-ICE."""
 from __future__ import annotations
 
-from typing import Any, Tuple, cast, Callable, Optional, Dict, Tuple, Any
+from typing import Any, Callable, Dict, Optional, Tuple, cast
 import numpy as np
 import numpy.typing as npt
 import matplotlib.pyplot as plt

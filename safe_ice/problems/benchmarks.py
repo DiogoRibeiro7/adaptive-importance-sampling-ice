@@ -13,51 +13,77 @@ class BenchmarkProblems:
     """Complete implementation of benchmark problems from the paper."""
 
     @staticmethod
+    def _as_2d_input(u: npt.ArrayLike) -> tuple[npt.NDArray[np.float64], bool]:
+        """Normalize inputs to (n, d) and track if original input was a single sample."""
+        arr = np.asarray(u, dtype=np.float64)
+        if arr.ndim == 1:
+            return arr.reshape(1, -1), True
+        if arr.ndim != 2:
+            raise ValueError("Input must be a 1-D or 2-D array.")
+        return arr, False
+
+    @staticmethod
     def four_mode_series_system(
-        z: float = 0.0,
-    ) -> Callable[[npt.ArrayLike], float]:
+        z: float = 3.8,
+    ) -> Callable[[npt.ArrayLike], float | npt.NDArray[np.float64]]:
         """Four-mode series system from Section 4.1 (Equation 37)."""
 
-        def limit_state_function(u: npt.ArrayLike) -> float:
-            arr = np.asarray(u, dtype=np.float64)
-            u1 = float(arr[0])
-            u2 = float(arr[1])
+        def limit_state_function(
+            u: npt.ArrayLike,
+        ) -> float | npt.NDArray[np.float64]:
+            arr, is_single = BenchmarkProblems._as_2d_input(u)
+            if arr.shape[1] != 2:
+                raise ValueError("four_mode_series_system expects dimension 2.")
 
-            g1 = float(0.1 * (u1 - u2) ** 2 - (u1 + u2) / np.sqrt(2.0) + 3.0)
-            g2 = float(0.1 * (u1 - u2) ** 2 + (u1 + u2) / np.sqrt(2.0) + 3.0)
-            g3 = float(u1 - u2 + np.sqrt(3.5))  # sqrt(7/2) = sqrt(3.5)
-            g4 = float(u2 - u1 + np.sqrt(3.5))
+            u1 = arr[:, 0]
+            u2 = arr[:, 1]
 
-            g_min = min(g1, g2, g3, g4)
-            return float(g_min + z)
+            g1 = 0.1 * (u1 - u2) ** 2 - (u1 + u2) / np.sqrt(2.0) + 3.0
+            g2 = 0.1 * (u1 - u2) ** 2 + (u1 + u2) / np.sqrt(2.0) + 3.0
+            g3 = u1 - u2 + np.sqrt(3.5)
+            g4 = u2 - u1 + np.sqrt(3.5)
+
+            g_min = np.minimum(np.minimum(g1, g2), np.minimum(g3, g4)) + z
+            if is_single:
+                return float(g_min[0])
+            return g_min.astype(np.float64, copy=False)
 
         return limit_state_function
 
     @staticmethod
     def three_mode_problem(
         z: float = 3.0,
-    ) -> Callable[[npt.ArrayLike], float]:
+    ) -> Callable[[npt.ArrayLike], float | npt.NDArray[np.float64]]:
         """Three-mode problem from Section 4.2 (Equation 38)."""
 
-        def limit_state_function(u: npt.ArrayLike) -> float:
-            arr = np.asarray(u, dtype=np.float64)
-            u1 = float(arr[0])
-            u2 = float(arr[1])
+        def limit_state_function(
+            u: npt.ArrayLike,
+        ) -> float | npt.NDArray[np.float64]:
+            arr, is_single = BenchmarkProblems._as_2d_input(u)
+            if arr.shape[1] != 2:
+                raise ValueError("three_mode_problem expects dimension 2.")
 
-            g1 = float(z - 1.0 - u2 + np.exp(-(u1**2) / 10.0) + (u1 / 5.0) ** 4)
-            g2 = float((z**2) / 2.0 - u1 * u2)
+            u1 = arr[:, 0]
+            u2 = arr[:, 1]
 
-            return float(min(g1, g2))
+            g1 = z - 1.0 - u2 + np.exp(-(u1**2) / 10.0) + (u1 / 5.0) ** 4
+            g2 = (z**2) / 2.0 - u1 * u2
+            g_min = np.minimum(g1, g2)
+            if is_single:
+                return float(g_min[0])
+            return g_min.astype(np.float64, copy=False)
 
         return limit_state_function
 
     @staticmethod
     def nonlinear_oscillator_simplified(
         d: int = 10, z: float = 0.05
-    ) -> Callable[[npt.ArrayLike], float]:
+    ) -> Callable[[npt.ArrayLike], float | npt.NDArray[np.float64]]:
         """Simplified nonlinear oscillator problem."""
 
-        def limit_state_function(u: npt.ArrayLike) -> float:
+        def limit_state_function(
+            u: npt.ArrayLike,
+        ) -> float | npt.NDArray[np.float64]:
             # Parameters from the paper (kept as floats)
             m = 6e4        # mass
             k = 5e6        # stiffness
@@ -73,35 +99,81 @@ class BenchmarkProblems:
             sigma = float(np.sqrt(2.0 * S * domega))
 
             # Construct force “RMS” proxy from u
-            arr = np.asarray(u, dtype=np.float64)
-            force_rms = float(sigma * np.sqrt(float(np.sum(arr**2))))
+            arr, is_single = BenchmarkProblems._as_2d_input(u)
+            if arr.shape[1] < d_eff:
+                padded = np.zeros((arr.shape[0], d_eff), dtype=np.float64)
+                padded[:, : arr.shape[1]] = arr
+                arr_eff = padded
+            else:
+                arr_eff = arr[:, :d_eff]
+
+            force_rms = sigma * np.sqrt(np.sum(arr_eff**2, axis=1))
 
             # Simplified response calculation
-            response_scale = float(force_rms / (k * (1.0 - alpha)))
+            response_scale = force_rms / (k * (1.0 - alpha))
 
             # Approximate maximum displacement
-            max_displacement = float(
-                response_scale * (1.0 + 0.5 * force_rms / (k * 0.04))
-            )
+            max_displacement = response_scale * (1.0 + 0.5 * force_rms / (k * 0.04))
+            g_values = z - max_displacement
 
-            return float(z - max_displacement)
+            if is_single:
+                return float(g_values[0])
+            return g_values.astype(np.float64, copy=False)
 
         return limit_state_function
 
     @staticmethod
+    def nonlinear_oscillator(
+        dimension: int = 10, z: float = 0.05
+    ) -> Callable[[npt.ArrayLike], float | npt.NDArray[np.float64]]:
+        """Compatibility wrapper for nonlinear oscillator benchmark."""
+        return BenchmarkProblems.nonlinear_oscillator_simplified(d=dimension, z=z)
+
+    @staticmethod
     def two_mode_opposite_directions(
-        z: float = 5.5,
-    ) -> Callable[[npt.ArrayLike], float]:
+        dimension: int = 2,
+        z: float = 3.0,
+    ) -> Callable[[npt.ArrayLike], float | npt.NDArray[np.float64]]:
         """Two-mode problem with opposite directions (Equation 43)."""
 
-        def limit_state_function(u: npt.ArrayLike) -> float:
-            arr = np.asarray(u, dtype=np.float64)
-            d = int(arr.size)
-            sum_u = float(np.sum(arr))
+        d = int(dimension)
 
-            g1 = float(z - sum_u / np.sqrt(float(d)))
-            g2 = float(z + sum_u / np.sqrt(float(d)))
+        def limit_state_function(
+            u: npt.ArrayLike,
+        ) -> float | npt.NDArray[np.float64]:
+            arr, is_single = BenchmarkProblems._as_2d_input(u)
+            if arr.shape[1] != d:
+                raise ValueError(f"two_mode_opposite_directions expects dimension {d}.")
 
-            return float(min(g1, g2))
+            sum_u = np.sum(arr, axis=1)
+            scale = np.sqrt(float(d))
+            g1 = z - sum_u / scale
+            g2 = z + sum_u / scale
+            g_min = np.minimum(g1, g2)
+            if is_single:
+                return float(g_min[0])
+            return g_min.astype(np.float64, copy=False)
+
+        return limit_state_function
+
+    @staticmethod
+    def nakagami_ratio_problem(
+        threshold: float = 0.1,
+    ) -> Callable[[npt.ArrayLike], float | npt.NDArray[np.float64]]:
+        """Simple ratio-style benchmark using two transformed standard normals."""
+
+        def limit_state_function(
+            u: npt.ArrayLike,
+        ) -> float | npt.NDArray[np.float64]:
+            arr, is_single = BenchmarkProblems._as_2d_input(u)
+            if arr.shape[1] != 2:
+                raise ValueError("nakagami_ratio_problem expects dimension 2.")
+
+            log_ratio = np.clip(arr[:, 1] - arr[:, 0], -700.0, 700.0)
+            g_values = np.exp(log_ratio) - threshold
+
+            if is_single:
+                return float(g_values[0])
+            return g_values.astype(np.float64, copy=False)
 
         return limit_state_function

@@ -9,12 +9,23 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import numpy as np
 import numpy.typing as npt
 from scipy.stats import chi2
-from numba import jit, prange
+
+try:
+    from numba import jit, prange
+except ImportError:
+    # Optional acceleration: keep API compatible when numba is unavailable.
+    def jit(*args: Any, **kwargs: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+            return func
+
+        return decorator
+
+    def prange(*args: Any, **kwargs: Any) -> range:  # type: ignore[misc]
+        return range(*args)
 
 from .parameters import vMFNMParameters
-from ..distributions.nakagami import NakagamiDistribution
-from ..distributions.inverse_nakagami import InverseNakagamiDistribution
-from ..distributions.von_mises_fisher import VonMisesFisherSampler
+from ..distributions.nakagami import InverseNakagamiDistribution, NakagamiDistribution
+from ..distributions.vmf import VonMisesFisherSampler
 from ..optimization.penalized_em import PenalizedEMOptimizer
 
 # Type alias for NumPy float arrays
@@ -46,6 +57,7 @@ class OptimizedSafeICE:
         enable_caching: bool = True,
         enable_parallel: bool = True,
         batch_size: Optional[int] = None,
+        random_state: Optional[int | np.random.Generator] = None,
     ) -> None:
         """
         Initialize Optimized Safe-ICE.
@@ -86,6 +98,14 @@ class OptimizedSafeICE:
         self.N = int(N)
         self.sigma0 = float(sigma0)
         self.em_max_iter = int(em_max_iter)
+
+        # Deterministic RNG support
+        if random_state is None:
+            self._rng: Any = np.random  # legacy global state
+        elif isinstance(random_state, np.random.Generator):
+            self._rng = random_state
+        else:
+            self._rng = np.random.default_rng(int(random_state))
 
         # Optimization flags
         self.enable_caching = enable_caching
@@ -318,7 +338,7 @@ class OptimizedSafeICE:
         samples = np.zeros((self.N, self.d), dtype=np.float64)
 
         # Determine which samples come from each component
-        uniform_draws = np.random.uniform(size=self.N)
+        uniform_draws = self._rng.uniform(size=self.N)
         light_mask = uniform_draws < lambda_val
         n_light = np.sum(light_mask)
         n_heavy = self.N - n_light
@@ -340,7 +360,7 @@ class OptimizedSafeICE:
         samples = np.zeros((n_samples, self.d), dtype=np.float64)
 
         # Choose components for all samples at once
-        component_indices = np.random.choice(params.K, size=n_samples, p=params.pi)
+        component_indices = self._rng.choice(params.K, size=n_samples, p=params.pi)
 
         # Group by component for efficient sampling
         for k in range(params.K):
@@ -350,13 +370,15 @@ class OptimizedSafeICE:
                 continue
 
             # Sample radii (vectorized)
-            radii = NakagamiDistribution(
-                float(params.m[k]), float(params.Omega[k])
-            ).sample(n_k)
+            radii = NakagamiDistribution.sample(
+                float(params.m[k]), float(params.Omega[k]), n_k,
+                rng=self._rng,
+            )
 
             # Sample directions (already vectorized in VonMisesFisherSampler)
             directions = VonMisesFisherSampler.sample(
-                params.mu[k], float(params.kappa[k]), n_k
+                params.mu[k], float(params.kappa[k]), n_k,
+                rng=self._rng,
             )
 
             # Combine
@@ -369,7 +391,7 @@ class OptimizedSafeICE:
         samples = np.zeros((n_samples, self.d), dtype=np.float64)
 
         # Choose components
-        component_indices = np.random.choice(params.K, size=n_samples, p=params.pi)
+        component_indices = self._rng.choice(params.K, size=n_samples, p=params.pi)
 
         # Group by component
         for k in range(params.K):
@@ -384,13 +406,15 @@ class OptimizedSafeICE:
             )
 
             # Sample radii from inverse Nakagami
-            radii = InverseNakagamiDistribution(
-                float(self.m_IN), omega_in
-            ).sample(n_k)
+            radii = InverseNakagamiDistribution.sample(
+                float(self.m_IN), omega_in, n_k,
+                rng=self._rng,
+            )
 
             # Sample directions
             directions = VonMisesFisherSampler.sample(
-                params.mu[k], float(params.kappa[k]), n_k
+                params.mu[k], float(params.kappa[k]), n_k,
+                rng=self._rng,
             )
 
             # Combine
@@ -491,9 +515,9 @@ class OptimizedSafeICE:
         # For each component
         for k in range(params.K):
             # Radial density (Nakagami)
-            radial_density = NakagamiDistribution(
-                float(params.m[k]), float(params.Omega[k]) * sigma**2
-            ).pdf(radii)
+            radial_density = NakagamiDistribution.pdf(
+                radii, float(params.m[k]), float(params.Omega[k]) * sigma**2
+            )
 
             # Angular density (vMF) - vectorized dot product
             angular_density = np.exp(
@@ -530,9 +554,9 @@ class OptimizedSafeICE:
             )
 
             # Radial density (Inverse Nakagami)
-            radial_density = InverseNakagamiDistribution(
-                float(self.m_IN), omega_in
-            ).pdf(radii)
+            radial_density = InverseNakagamiDistribution.pdf(
+                radii, float(self.m_IN), omega_in
+            )
 
             # Angular density (vMF)
             angular_density = np.exp(
@@ -555,14 +579,14 @@ class OptimizedSafeICE:
         d = int(self.d)
 
         pi = np.ones(K, dtype=np.float64) / float(K)
-        m = np.random.uniform(1.0, 3.0, K).astype(np.float64)
-        Omega = np.random.uniform(0.5, 2.0, K).astype(np.float64)
+        m = np.asarray(self._rng.uniform(1.0, 3.0, K), dtype=np.float64)
+        Omega = np.asarray(self._rng.uniform(0.5, 2.0, K), dtype=np.float64)
 
-        mu = np.random.normal(0.0, 1.0, (K, d)).astype(np.float64)
+        mu = np.asarray(self._rng.normal(0.0, 1.0, (K, d)), dtype=np.float64)
         row_norms = np.linalg.norm(mu, axis=1, keepdims=True)
         mu = mu / np.maximum(row_norms, np.finfo(np.float64).eps)
 
-        kappa = np.random.uniform(0.1, 1.0, K).astype(np.float64)
+        kappa = np.asarray(self._rng.uniform(0.1, 1.0, K), dtype=np.float64)
 
         return vMFNMParameters(pi=pi, m=m, Omega=Omega, mu=mu, kappa=kappa)
 

@@ -36,6 +36,7 @@ class AdaptiveSafeICE(OptimizedSafeICE):
         max_iterations: int = 30,
         auto_tune: bool = True,
         adaptive_schedule: bool = True,
+        random_state: Optional[int | np.random.Generator] = None,
         **kwargs
     ) -> None:
         """
@@ -55,6 +56,8 @@ class AdaptiveSafeICE(OptimizedSafeICE):
             Enable automatic parameter tuning.
         adaptive_schedule : bool, optional
             Enable adaptive annealing schedule.
+        random_state : int or np.random.Generator, optional
+            Random state for reproducibility.
         **kwargs
             Additional arguments passed to OptimizedSafeICE.
         """
@@ -79,6 +82,7 @@ class AdaptiveSafeICE(OptimizedSafeICE):
             dimension=dimension,
             N=N,
             max_iterations=max_iterations,
+            random_state=random_state,
             **kwargs
         )
 
@@ -654,8 +658,8 @@ class AdaptiveSafeICE(OptimizedSafeICE):
             m_range = (2.0, 4.0)
             omega_range = (1.0, 3.0)
 
-        m = np.random.uniform(m_range[0], m_range[1], K).astype(np.float64)
-        Omega = np.random.uniform(omega_range[0], omega_range[1], K).astype(np.float64)
+        m = self._rng.uniform(m_range[0], m_range[1], K).astype(np.float64)
+        Omega = self._rng.uniform(omega_range[0], omega_range[1], K).astype(np.float64)
 
         # Adaptive vMF initialization (spread directions)
         mu = np.zeros((K, d), dtype=np.float64)
@@ -668,7 +672,7 @@ class AdaptiveSafeICE(OptimizedSafeICE):
         else:
             # Random orthogonal directions for high-d
             for k in range(min(K, d)):
-                vec = np.random.randn(d)
+                vec = self._rng.standard_normal(d)
                 # Orthogonalize against previous directions
                 for j in range(k):
                     vec -= np.dot(vec, mu[j]) * mu[j]
@@ -676,11 +680,11 @@ class AdaptiveSafeICE(OptimizedSafeICE):
 
             # Random directions for remaining components
             for k in range(d, K):
-                mu[k] = np.random.randn(d)
+                mu[k] = self._rng.standard_normal(d)
                 mu[k] /= np.linalg.norm(mu[k])
 
         # Adaptive concentration (lower for exploration)
         kappa_base = 0.5 if d <= 5 else 0.2
-        kappa = np.random.uniform(kappa_base, kappa_base * 2, K).astype(np.float64)
+        kappa = self._rng.uniform(kappa_base, kappa_base * 2, K).astype(np.float64)
 
         return vMFNMParameters(pi=pi, m=m, Omega=Omega, mu=mu, kappa=kappa)

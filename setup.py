@@ -85,7 +85,7 @@ setup(
         "Topic :: Scientific/Engineering :: Physics",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.9",
+    python_requires=">=3.9,<3.13",
     install_requires=install_requires,
     extras_require=extras_require,
     entry_points={

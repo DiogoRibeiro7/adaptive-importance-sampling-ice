@@ -150,26 +150,31 @@ class NakagamiDistribution:
 
     # -------------------- Sample --------------------
     @staticmethod
-    def sample(m: float, Omega: float, n: int = 1) -> NDArrayF:
-        """Draw `n` Nakagami samples as sqrt of a Gamma(m, Omega/m)."""
+    def sample(
+        m: float, Omega: float, n: int = 1, rng: object = None
+    ) -> NDArrayF:
+        """Draw `n` Nakagami samples as sqrt of a Gamma(m, Omega/m).
+
+        Parameters
+        ----------
+        rng : numpy random generator, optional
+            If *None*, the global ``np.random`` state is used.
+        """
+        _rng = rng if rng is not None else np.random
         m = float(m)
         Omega = float(Omega)
         n = int(n)
 
-        # Handle extreme m values
         if m > 100:
-            # For very large m, Nakagami approaches a normal distribution
-            # Use normal approximation: mean ≈ sqrt(Omega), variance ≈ Omega/(4m)
             mean = np.sqrt(Omega * (m - 0.5) / m) if m > 0.5 else 0.0
             variance = Omega * (1 - 1 / (4 * m)) / m if m > 0.25 else Omega
             std = np.sqrt(variance)
-            samples = np.random.normal(mean, std, n)
-            # Ensure positive values
+            samples = _rng.normal(mean, std, n)
             return np.abs(samples).astype(np.float64, copy=False)
 
-        # Standard approach for reasonable m values
-        # X ~ Gamma(shape=m, scale=Omega/m)  (NumPy parameterizes by shape & scale)
-        x = np.random.gamma(shape=m, scale=(Omega / m), size=n).astype(np.float64, copy=False)
+        x = _rng.gamma(
+            shape=m, scale=(Omega / m), size=n
+        ).astype(np.float64, copy=False)
         return np.sqrt(x).astype(np.float64, copy=False)
 
 
@@ -251,9 +256,16 @@ class InverseNakagamiDistribution:
 
     # -------------------- Sample --------------------
     @staticmethod
-    def sample(m: float, Omega: float, n: int = 1) -> NDArrayF:
-        """Draw `n` samples via inverse transform Y = 1 / R, R ~ Nakagami(m, Omega)."""
-        r = NakagamiDistribution.sample(m, Omega, n)
-        # Avoid division by zero (practically not needed, r>0 a.s.; still guard)
+    def sample(
+        m: float, Omega: float, n: int = 1, rng: object = None
+    ) -> NDArrayF:
+        """Draw `n` samples via Y = 1/R, R ~ Nakagami(m, Omega).
+
+        Parameters
+        ----------
+        rng : numpy random generator, optional
+            Forwarded to :meth:`NakagamiDistribution.sample`.
+        """
+        r = NakagamiDistribution.sample(m, Omega, n, rng=rng)
         eps = np.finfo(np.float64).tiny
         return 1.0 / np.maximum(r, eps)

@@ -269,18 +269,24 @@ class TestIntegration:
 
         dist = vMFNMDistribution(params)
 
-        # Generate many samples
+        # Generate many samples from a wide proposal N(0, 9I)
         n_samples = 100000
-        samples = (np.random.randn(n_samples, 2) * 3.0).astype(np.float64)  # wide range
-
-        # Approximate integral using importance sampling
-        pdf_values = dist.pdf(samples)
-        prior_pdf = (1.0 / (2.0 * np.pi)) * np.exp(
-            -0.5 * np.sum(samples**2, axis=1)
+        proposal_std = 3.0
+        samples = (np.random.randn(n_samples, 2) * proposal_std).astype(
+            np.float64
         )
 
-        # This should be roughly n_samples if PDF integrates to 1
-        integral_estimate = float(np.sum(pdf_values / prior_pdf) / n_samples)
+        # Approximate ∫ f(x) dx via importance sampling with the actual
+        # proposal density q(x) = N(0, σ²I).
+        pdf_values = dist.pdf(samples)
+        d = 2
+        proposal_var = proposal_std ** 2
+        proposal_pdf = (
+            (1.0 / (2.0 * np.pi * proposal_var) ** (d / 2.0))
+            * np.exp(-0.5 * np.sum(samples ** 2, axis=1) / proposal_var)
+        )
+
+        integral_estimate = float(np.mean(pdf_values / proposal_pdf))
 
         # Allow large tolerance due to Monte Carlo approximation
         # This is more of a sanity check
