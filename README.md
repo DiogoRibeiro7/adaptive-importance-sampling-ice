@@ -40,8 +40,8 @@ cd adaptive-importance-sampling-ice
 # Install in development mode
 pip install -e .
 
-# Or install dependencies directly
-pip install -r requirements.txt
+# With development/testing extras
+pip install -e ".[dev]"
 ```
 
 ### Basic Usage
