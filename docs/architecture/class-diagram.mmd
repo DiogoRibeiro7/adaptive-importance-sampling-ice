@@ -25,6 +25,11 @@ classDiagram
   }
 
   class vMFNMParameters {
+    +pi
+    +m
+    +Omega
+    +mu
+    +kappa
     +K()
     +d()
   }
@@ -166,20 +171,21 @@ classDiagram
     +limit_state_function()
     +nonlinear_oscillator_simplified()
     +limit_state_function()
+    +nonlinear_oscillator()
     +two_mode_opposite_directions()
-    +limit_state_function()
   }
 
   class HeatTransferProblem {
     +grid_size
     +l
+    +correlation_length
     +n_terms
-    +Q
-    +domain
+    +field_std
     +generate_permeability_field()
     +solve_heat_equation()
     +create_limit_state_function()
     +limit_state_function()
+    +get_limit_state_function()
   }
 
   class PerformanceCache {
@@ -387,6 +393,17 @@ classDiagram
     +test_cv_convergence()
     +g()
     +test_early_stopping()
+    +g()
+  }
+
+  class TestReproducibility {
+    +test_same_seed_same_result()
+    +g()
+    +test_different_seed_different_result()
+    +g()
+    +test_generator_accepted()
+    +g()
+    +test_none_is_backward_compatible()
     +g()
   }
 
