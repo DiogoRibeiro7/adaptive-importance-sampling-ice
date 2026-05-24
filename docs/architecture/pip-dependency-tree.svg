@@ -21,7 +21,7 @@
 <title>idna</title>
 <ellipse fill="none" stroke="black" cx="283.84" cy="-236.35" rx="33.88" ry="26.74"/>
 <text text-anchor="middle" x="283.84" y="-240.15" font-family="Times,serif" font-size="14.00">idna</text>
-<text text-anchor="middle" x="283.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.15</text>
+<text text-anchor="middle" x="283.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.16</text>
 </g>
 <!-- anyio&#45;&gt;idna -->
 <g id="edge1" class="edge">
@@ -154,7 +154,7 @@
 <title>certifi</title>
 <ellipse fill="none" stroke="black" cx="168.84" cy="-236.35" rx="62.87" ry="26.74"/>
 <text text-anchor="middle" x="168.84" y="-240.15" font-family="Times,serif" font-size="14.00">certifi</text>
-<text text-anchor="middle" x="168.84" y="-225.15" font-family="Times,serif" font-size="14.00">2026.4.22</text>
+<text text-anchor="middle" x="168.84" y="-225.15" font-family="Times,serif" font-size="14.00">2026.5.20</text>
 </g>
 <!-- requests&#45;&gt;certifi -->
 <g id="edge75" class="edge">
@@ -294,7 +294,7 @@
 <title>dulwich</title>
 <ellipse fill="none" stroke="black" cx="1032.84" cy="-341.09" rx="50.82" ry="26.74"/>
 <text text-anchor="middle" x="1032.84" y="-344.89" font-family="Times,serif" font-size="14.00">dulwich</text>
-<text text-anchor="middle" x="1032.84" y="-329.89" font-family="Times,serif" font-size="14.00">1.2.1</text>
+<text text-anchor="middle" x="1032.84" y="-329.89" font-family="Times,serif" font-size="14.00">1.2.4</text>
 </g>
 <!-- dulwich&#45;&gt;typing&#45;extensions -->
 <g id="edge12" class="edge">
@@ -357,7 +357,7 @@
 <title>greenlet</title>
 <ellipse fill="none" stroke="black" cx="610.84" cy="-236.35" rx="54.39" ry="26.74"/>
 <text text-anchor="middle" x="610.84" y="-240.15" font-family="Times,serif" font-size="14.00">greenlet</text>
-<text text-anchor="middle" x="610.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.5.0</text>
+<text text-anchor="middle" x="610.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.5.1</text>
 </g>
 <!-- sqlalchemy&#45;&gt;greenlet -->
 <g id="edge79" class="edge">
@@ -488,9 +488,9 @@
 <!-- zipp -->
 <g id="node41" class="node">
 <title>zipp</title>
-<ellipse fill="none" stroke="black" cx="2263.84" cy="-236.35" rx="43.68" ry="26.74"/>
+<ellipse fill="none" stroke="black" cx="2263.84" cy="-236.35" rx="37.45" ry="26.74"/>
 <text text-anchor="middle" x="2263.84" y="-240.15" font-family="Times,serif" font-size="14.00">zipp</text>
-<text text-anchor="middle" x="2263.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.23.1</text>
+<text text-anchor="middle" x="2263.84" y="-225.15" font-family="Times,serif" font-size="14.00">4.1.0</text>
 </g>
 <!-- importlib&#45;metadata&#45;&gt;zipp -->
 <g id="edge23" class="edge">
@@ -532,7 +532,7 @@
 <title>more&#45;itertools</title>
 <ellipse fill="none" stroke="black" cx="2658.84" cy="-236.35" rx="83.38" ry="26.74"/>
 <text text-anchor="middle" x="2658.84" y="-240.15" font-family="Times,serif" font-size="14.00">more&#45;itertools</text>
-<text text-anchor="middle" x="2658.84" y="-225.15" font-family="Times,serif" font-size="14.00">11.0.2</text>
+<text text-anchor="middle" x="2658.84" y="-225.15" font-family="Times,serif" font-size="14.00">11.1.0</text>
 </g>
 <!-- jaraco.classes&#45;&gt;more&#45;itertools -->
 <g id="edge24" class="edge">
@@ -887,7 +887,7 @@
 <title>trove&#45;classifiers</title>
 <ellipse fill="none" stroke="black" cx="1868.84" cy="-445.83" rx="91.85" ry="26.74"/>
 <text text-anchor="middle" x="1868.84" y="-449.63" font-family="Times,serif" font-size="14.00">trove&#45;classifiers</text>
-<text text-anchor="middle" x="1868.84" y="-434.63" font-family="Times,serif" font-size="14.00">2026.5.7.17</text>
+<text text-anchor="middle" x="1868.84" y="-434.63" font-family="Times,serif" font-size="14.00">2026.5.22.10</text>
 </g>
 <!-- poetry&#45;&gt;trove&#45;classifiers -->
 <g id="edge52" class="edge">
