@@ -21,7 +21,7 @@
 <title>idna</title>
 <ellipse fill="none" stroke="black" cx="283.84" cy="-236.35" rx="33.88" ry="26.74"/>
 <text text-anchor="middle" x="283.84" y="-240.15" font-family="Times,serif" font-size="14.00">idna</text>
-<text text-anchor="middle" x="283.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.16</text>
+<text text-anchor="middle" x="283.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.17</text>
 </g>
 <!-- anyio&#45;&gt;idna -->
 <g id="edge1" class="edge">
@@ -259,7 +259,7 @@
 <title>coverage</title>
 <ellipse fill="none" stroke="black" cx="4565.84" cy="-445.83" rx="57.05" ry="26.74"/>
 <text text-anchor="middle" x="4565.84" y="-449.63" font-family="Times,serif" font-size="14.00">coverage</text>
-<text text-anchor="middle" x="4565.84" y="-434.63" font-family="Times,serif" font-size="14.00">7.14.0</text>
+<text text-anchor="middle" x="4565.84" y="-434.63" font-family="Times,serif" font-size="14.00">7.14.1</text>
 </g>
 <!-- cryptography -->
 <g id="node23" class="node">
@@ -294,7 +294,7 @@
 <title>dulwich</title>
 <ellipse fill="none" stroke="black" cx="1032.84" cy="-341.09" rx="50.82" ry="26.74"/>
 <text text-anchor="middle" x="1032.84" y="-344.89" font-family="Times,serif" font-size="14.00">dulwich</text>
-<text text-anchor="middle" x="1032.84" y="-329.89" font-family="Times,serif" font-size="14.00">1.2.4</text>
+<text text-anchor="middle" x="1032.84" y="-329.89" font-family="Times,serif" font-size="14.00">1.2.5</text>
 </g>
 <!-- dulwich&#45;&gt;typing&#45;extensions -->
 <g id="edge12" class="edge">
@@ -322,7 +322,7 @@
 <title>sqlalchemy</title>
 <ellipse fill="none" stroke="black" cx="490.84" cy="-341.09" rx="68.68" ry="26.74"/>
 <text text-anchor="middle" x="490.84" y="-344.89" font-family="Times,serif" font-size="14.00">sqlalchemy</text>
-<text text-anchor="middle" x="490.84" y="-329.89" font-family="Times,serif" font-size="14.00">2.0.49</text>
+<text text-anchor="middle" x="490.84" y="-329.89" font-family="Times,serif" font-size="14.00">2.0.50</text>
 </g>
 <!-- eralchemy2&#45;&gt;sqlalchemy -->
 <g id="edge13" class="edge">
@@ -399,7 +399,7 @@
 <title>platformdirs</title>
 <ellipse fill="none" stroke="black" cx="3139.84" cy="-236.35" rx="74.91" ry="26.74"/>
 <text text-anchor="middle" x="3139.84" y="-240.15" font-family="Times,serif" font-size="14.00">platformdirs</text>
-<text text-anchor="middle" x="3139.84" y="-225.15" font-family="Times,serif" font-size="14.00">4.9.6</text>
+<text text-anchor="middle" x="3139.84" y="-225.15" font-family="Times,serif" font-size="14.00">4.10.0</text>
 </g>
 <!-- findpython&#45;&gt;platformdirs -->
 <g id="edge16" class="edge">
@@ -901,7 +901,7 @@
 <title>virtualenv</title>
 <ellipse fill="none" stroke="black" cx="2937.84" cy="-445.83" rx="62.87" ry="26.74"/>
 <text text-anchor="middle" x="2937.84" y="-449.63" font-family="Times,serif" font-size="14.00">virtualenv</text>
-<text text-anchor="middle" x="2937.84" y="-434.63" font-family="Times,serif" font-size="14.00">21.3.3</text>
+<text text-anchor="middle" x="2937.84" y="-434.63" font-family="Times,serif" font-size="14.00">21.4.1</text>
 </g>
 <!-- poetry&#45;&gt;virtualenv -->
 <g id="edge53" class="edge">
@@ -943,14 +943,14 @@
 <title>python&#45;discovery</title>
 <ellipse fill="none" stroke="black" cx="3139.84" cy="-341.09" rx="98.08" ry="26.74"/>
 <text text-anchor="middle" x="3139.84" y="-344.89" font-family="Times,serif" font-size="14.00">python&#45;discovery</text>
-<text text-anchor="middle" x="3139.84" y="-329.89" font-family="Times,serif" font-size="14.00">1.3.1</text>
+<text text-anchor="middle" x="3139.84" y="-329.89" font-family="Times,serif" font-size="14.00">1.4.0</text>
 </g>
 <!-- virtualenv&#45;&gt;python&#45;discovery -->
 <g id="edge84" class="edge">
 <title>virtualenv&#45;&gt;python&#45;discovery</title>
 <path fill="none" stroke="black" d="M2977.27,-424.78C3008.15,-409.07 3051.45,-387.05 3085.6,-369.68"/>
 <polygon fill="black" stroke="black" points="3087.19,-372.79 3094.52,-365.14 3084.02,-366.56 3087.19,-372.79"/>
-<text text-anchor="middle" x="3082.34" y="-389.76" font-family="Times,serif" font-size="14.00">&gt;=1.3.1</text>
+<text text-anchor="middle" x="3075.34" y="-389.76" font-family="Times,serif" font-size="14.00">&gt;=1.4</text>
 </g>
 <!-- pydeps -->
 <g id="node69" class="node">
