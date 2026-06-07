@@ -21,7 +21,7 @@
 <title>idna</title>
 <ellipse fill="none" stroke="black" cx="283.84" cy="-236.35" rx="33.88" ry="26.74"/>
 <text text-anchor="middle" x="283.84" y="-240.15" font-family="Times,serif" font-size="14.00">idna</text>
-<text text-anchor="middle" x="283.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.17</text>
+<text text-anchor="middle" x="283.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.18</text>
 </g>
 <!-- anyio&#45;&gt;idna -->
 <g id="edge1" class="edge">
@@ -287,14 +287,14 @@
 <title>distlib</title>
 <ellipse fill="none" stroke="black" cx="2655.84" cy="-341.09" rx="43.68" ry="26.74"/>
 <text text-anchor="middle" x="2655.84" y="-344.89" font-family="Times,serif" font-size="14.00">distlib</text>
-<text text-anchor="middle" x="2655.84" y="-329.89" font-family="Times,serif" font-size="14.00">0.4.0</text>
+<text text-anchor="middle" x="2655.84" y="-329.89" font-family="Times,serif" font-size="14.00">0.4.1</text>
 </g>
 <!-- dulwich -->
 <g id="node26" class="node">
 <title>dulwich</title>
 <ellipse fill="none" stroke="black" cx="1032.84" cy="-341.09" rx="50.82" ry="26.74"/>
 <text text-anchor="middle" x="1032.84" y="-344.89" font-family="Times,serif" font-size="14.00">dulwich</text>
-<text text-anchor="middle" x="1032.84" y="-329.89" font-family="Times,serif" font-size="14.00">1.2.5</text>
+<text text-anchor="middle" x="1032.84" y="-329.89" font-family="Times,serif" font-size="14.00">1.2.6</text>
 </g>
 <!-- dulwich&#45;&gt;typing&#45;extensions -->
 <g id="edge12" class="edge">
@@ -378,7 +378,7 @@
 <title>filelock</title>
 <ellipse fill="none" stroke="black" cx="3374.84" cy="-236.35" rx="47.25" ry="26.74"/>
 <text text-anchor="middle" x="3374.84" y="-240.15" font-family="Times,serif" font-size="14.00">filelock</text>
-<text text-anchor="middle" x="3374.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.29.0</text>
+<text text-anchor="middle" x="3374.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.29.1</text>
 </g>
 <!-- findpython -->
 <g id="node33" class="node">
@@ -691,14 +691,14 @@
 <title>pbs&#45;installer</title>
 <ellipse fill="none" stroke="black" cx="1238.84" cy="-445.83" rx="74.91" ry="26.74"/>
 <text text-anchor="middle" x="1238.84" y="-449.63" font-family="Times,serif" font-size="14.00">pbs&#45;installer</text>
-<text text-anchor="middle" x="1238.84" y="-434.63" font-family="Times,serif" font-size="14.00">2026.5.10</text>
+<text text-anchor="middle" x="1238.84" y="-434.63" font-family="Times,serif" font-size="14.00">2026.6.2</text>
 </g>
 <!-- pip -->
 <g id="node58" class="node">
 <title>pip</title>
 <ellipse fill="none" stroke="black" cx="5453.84" cy="-550.57" rx="43.68" ry="26.74"/>
 <text text-anchor="middle" x="5453.84" y="-554.37" font-family="Times,serif" font-size="14.00">pip</text>
-<text text-anchor="middle" x="5453.84" y="-539.37" font-family="Times,serif" font-size="14.00">26.1.1</text>
+<text text-anchor="middle" x="5453.84" y="-539.37" font-family="Times,serif" font-size="14.00">26.1.2</text>
 </g>
 <!-- pipdeptree -->
 <g id="node59" class="node">
@@ -887,7 +887,7 @@
 <title>trove&#45;classifiers</title>
 <ellipse fill="none" stroke="black" cx="1868.84" cy="-445.83" rx="91.85" ry="26.74"/>
 <text text-anchor="middle" x="1868.84" y="-449.63" font-family="Times,serif" font-size="14.00">trove&#45;classifiers</text>
-<text text-anchor="middle" x="1868.84" y="-434.63" font-family="Times,serif" font-size="14.00">2026.5.22.10</text>
+<text text-anchor="middle" x="1868.84" y="-434.63" font-family="Times,serif" font-size="14.00">2026.6.1.19</text>
 </g>
 <!-- poetry&#45;&gt;trove&#45;classifiers -->
 <g id="edge52" class="edge">
@@ -901,7 +901,7 @@
 <title>virtualenv</title>
 <ellipse fill="none" stroke="black" cx="2937.84" cy="-445.83" rx="62.87" ry="26.74"/>
 <text text-anchor="middle" x="2937.84" y="-449.63" font-family="Times,serif" font-size="14.00">virtualenv</text>
-<text text-anchor="middle" x="2937.84" y="-434.63" font-family="Times,serif" font-size="14.00">21.4.1</text>
+<text text-anchor="middle" x="2937.84" y="-434.63" font-family="Times,serif" font-size="14.00">21.4.2</text>
 </g>
 <!-- poetry&#45;&gt;virtualenv -->
 <g id="edge53" class="edge">
