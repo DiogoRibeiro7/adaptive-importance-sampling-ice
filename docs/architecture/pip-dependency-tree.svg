@@ -14,7 +14,7 @@
 <title>anyio</title>
 <ellipse fill="none" stroke="black" cx="319.84" cy="-341.09" rx="43.68" ry="26.74"/>
 <text text-anchor="middle" x="319.84" y="-344.89" font-family="Times,serif" font-size="14.00">anyio</text>
-<text text-anchor="middle" x="319.84" y="-329.89" font-family="Times,serif" font-size="14.00">4.13.0</text>
+<text text-anchor="middle" x="319.84" y="-329.89" font-family="Times,serif" font-size="14.00">4.14.0</text>
 </g>
 <!-- idna -->
 <g id="node2" class="node">
@@ -70,7 +70,7 @@
 <title>backports&#45;zstd</title>
 <ellipse fill="none" stroke="black" cx="5075.84" cy="-550.57" rx="86.03" ry="26.74"/>
 <text text-anchor="middle" x="5075.84" y="-554.37" font-family="Times,serif" font-size="14.00">backports&#45;zstd</text>
-<text text-anchor="middle" x="5075.84" y="-539.37" font-family="Times,serif" font-size="14.00">1.5.0</text>
+<text text-anchor="middle" x="5075.84" y="-539.37" font-family="Times,serif" font-size="14.00">1.6.0</text>
 </g>
 <!-- build -->
 <g id="node8" class="node">
@@ -133,7 +133,7 @@
 <title>msgpack</title>
 <ellipse fill="none" stroke="black" cx="1444.84" cy="-341.09" rx="56.64" ry="26.74"/>
 <text text-anchor="middle" x="1444.84" y="-344.89" font-family="Times,serif" font-size="14.00">msgpack</text>
-<text text-anchor="middle" x="1444.84" y="-329.89" font-family="Times,serif" font-size="14.00">1.2.0</text>
+<text text-anchor="middle" x="1444.84" y="-329.89" font-family="Times,serif" font-size="14.00">1.2.1</text>
 </g>
 <!-- cachecontrol&#45;&gt;msgpack -->
 <g id="edge6" class="edge">
@@ -154,7 +154,7 @@
 <title>certifi</title>
 <ellipse fill="none" stroke="black" cx="168.84" cy="-236.35" rx="62.87" ry="26.74"/>
 <text text-anchor="middle" x="168.84" y="-240.15" font-family="Times,serif" font-size="14.00">certifi</text>
-<text text-anchor="middle" x="168.84" y="-225.15" font-family="Times,serif" font-size="14.00">2026.5.20</text>
+<text text-anchor="middle" x="168.84" y="-225.15" font-family="Times,serif" font-size="14.00">2026.6.17</text>
 </g>
 <!-- requests&#45;&gt;certifi -->
 <g id="edge75" class="edge">
@@ -259,7 +259,7 @@
 <title>coverage</title>
 <ellipse fill="none" stroke="black" cx="4565.84" cy="-445.83" rx="57.05" ry="26.74"/>
 <text text-anchor="middle" x="4565.84" y="-449.63" font-family="Times,serif" font-size="14.00">coverage</text>
-<text text-anchor="middle" x="4565.84" y="-434.63" font-family="Times,serif" font-size="14.00">7.14.1</text>
+<text text-anchor="middle" x="4565.84" y="-434.63" font-family="Times,serif" font-size="14.00">7.14.2</text>
 </g>
 <!-- cryptography -->
 <g id="node23" class="node">
@@ -322,7 +322,7 @@
 <title>sqlalchemy</title>
 <ellipse fill="none" stroke="black" cx="490.84" cy="-341.09" rx="68.68" ry="26.74"/>
 <text text-anchor="middle" x="490.84" y="-344.89" font-family="Times,serif" font-size="14.00">sqlalchemy</text>
-<text text-anchor="middle" x="490.84" y="-329.89" font-family="Times,serif" font-size="14.00">2.0.50</text>
+<text text-anchor="middle" x="490.84" y="-329.89" font-family="Times,serif" font-size="14.00">2.0.51</text>
 </g>
 <!-- eralchemy2&#45;&gt;sqlalchemy -->
 <g id="edge13" class="edge">
@@ -357,7 +357,7 @@
 <title>greenlet</title>
 <ellipse fill="none" stroke="black" cx="610.84" cy="-236.35" rx="54.39" ry="26.74"/>
 <text text-anchor="middle" x="610.84" y="-240.15" font-family="Times,serif" font-size="14.00">greenlet</text>
-<text text-anchor="middle" x="610.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.5.1</text>
+<text text-anchor="middle" x="610.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.5.2</text>
 </g>
 <!-- sqlalchemy&#45;&gt;greenlet -->
 <g id="edge79" class="edge">
@@ -901,7 +901,7 @@
 <title>virtualenv</title>
 <ellipse fill="none" stroke="black" cx="2937.84" cy="-445.83" rx="62.87" ry="26.74"/>
 <text text-anchor="middle" x="2937.84" y="-449.63" font-family="Times,serif" font-size="14.00">virtualenv</text>
-<text text-anchor="middle" x="2937.84" y="-434.63" font-family="Times,serif" font-size="14.00">21.5.0</text>
+<text text-anchor="middle" x="2937.84" y="-434.63" font-family="Times,serif" font-size="14.00">21.5.1</text>
 </g>
 <!-- poetry&#45;&gt;virtualenv -->
 <g id="edge53" class="edge">
@@ -1034,7 +1034,7 @@
 <title>pytest</title>
 <ellipse fill="none" stroke="black" cx="4684.84" cy="-445.83" rx="43.68" ry="26.74"/>
 <text text-anchor="middle" x="4684.84" y="-449.63" font-family="Times,serif" font-size="14.00">pytest</text>
-<text text-anchor="middle" x="4684.84" y="-434.63" font-family="Times,serif" font-size="14.00">9.1.0</text>
+<text text-anchor="middle" x="4684.84" y="-434.63" font-family="Times,serif" font-size="14.00">9.1.1</text>
 </g>
 <!-- pytest&#45;&gt;packaging -->
 <g id="edge62" class="edge">
