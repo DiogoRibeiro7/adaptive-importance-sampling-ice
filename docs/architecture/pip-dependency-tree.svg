@@ -14,7 +14,7 @@
 <title>anyio</title>
 <ellipse fill="none" stroke="black" cx="319.84" cy="-341.09" rx="43.68" ry="26.74"/>
 <text text-anchor="middle" x="319.84" y="-344.89" font-family="Times,serif" font-size="14.00">anyio</text>
-<text text-anchor="middle" x="319.84" y="-329.89" font-family="Times,serif" font-size="14.00">4.14.0</text>
+<text text-anchor="middle" x="319.84" y="-329.89" font-family="Times,serif" font-size="14.00">4.14.1</text>
 </g>
 <!-- idna -->
 <g id="node2" class="node">
@@ -259,7 +259,7 @@
 <title>coverage</title>
 <ellipse fill="none" stroke="black" cx="4565.84" cy="-445.83" rx="57.05" ry="26.74"/>
 <text text-anchor="middle" x="4565.84" y="-449.63" font-family="Times,serif" font-size="14.00">coverage</text>
-<text text-anchor="middle" x="4565.84" y="-434.63" font-family="Times,serif" font-size="14.00">7.14.2</text>
+<text text-anchor="middle" x="4565.84" y="-434.63" font-family="Times,serif" font-size="14.00">7.14.3</text>
 </g>
 <!-- cryptography -->
 <g id="node23" class="node">
@@ -357,7 +357,7 @@
 <title>greenlet</title>
 <ellipse fill="none" stroke="black" cx="610.84" cy="-236.35" rx="54.39" ry="26.74"/>
 <text text-anchor="middle" x="610.84" y="-240.15" font-family="Times,serif" font-size="14.00">greenlet</text>
-<text text-anchor="middle" x="610.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.5.2</text>
+<text text-anchor="middle" x="610.84" y="-225.15" font-family="Times,serif" font-size="14.00">3.5.3</text>
 </g>
 <!-- sqlalchemy&#45;&gt;greenlet -->
 <g id="edge79" class="edge">
