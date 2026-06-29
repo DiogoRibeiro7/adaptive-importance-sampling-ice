@@ -47,12 +47,12 @@ Changelog = "https://github.com/diogoribeiro7/adaptive-importance-sampling-ice/b
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"
-numpy = "^2.4.1"
-scipy = "^1.17.0"
-matplotlib = "^3.10.8"
+numpy = "^2.5.0"
+scipy = "^1.18.0"
+matplotlib = "^3.11.0"
 pytest-benchmark = "^5.2.3"
 memory-profiler = "^0.61.0"
-psutil = "^7.2.1"
+psutil = "^7.2.2"
 
 [tool.poetry.scripts]
 safe-ice = "safe_ice.cli:main"
@@ -61,16 +61,16 @@ safe-ice = "safe_ice.cli:main"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.2"
-pytest-cov = "^7.0.0"
+pytest-cov = "^7.1.0"
 pytest-xdist = "^3.8.0"
-mypy = "^1.19.1"
-ruff = "^0.14.14"
+mypy = "^1.20.2"
+ruff = "^0.15.20"
 black = "^25.12.0"
 isort = "^7.0.0"
-pre-commit = "^4.5.1"
-bandit = "^1.9.3"
-pip-audit = "^2.10.0"
-tomlkit = "^0.14.0"
+pre-commit = "^4.6.0"
+bandit = "^1.9.4"
+pip-audit = "^2.10.1"
+tomlkit = "^0.15.0"
 
 [tool.poetry.group.docs.dependencies]
 sphinx = ">=6.0.0"
